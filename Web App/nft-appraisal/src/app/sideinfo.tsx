@@ -10,7 +10,22 @@ export default function SideInfo() {
     return (
       <div className="w-96 border-l border-gray-700 min-h-full p-6">
         <div className="space-y-6">
-          <div className="text-center">Loading...</div>
+          {/* Skeleton Image */}
+          <div className="aspect-square w-full bg-gray-800 rounded-lg animate-pulse" />
+          
+          {/* Skeleton Metadata */}
+          <div className="space-y-4">
+            <h2 className="w-32 h-7 bg-gray-800 rounded animate-pulse" />
+            
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((index) => (
+                <div key={index} className="bg-gray-800/50 p-4 rounded-lg space-y-2">
+                  <div className="w-24 h-4 bg-gray-800 rounded animate-pulse" />
+                  <div className="w-full h-5 bg-gray-800 rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );
