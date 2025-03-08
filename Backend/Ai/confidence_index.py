@@ -2,19 +2,26 @@
 import asyncio
 import os
 import json
-import random
 from pathlib import Path
 import textwrap
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
-from flare_ai_consensus.consensus import run_consensus, send_round
 from flare_ai_consensus.settings import Settings, Message
 from flare_ai_consensus.utils import load_json
 
+# Import our custom confidence consensus components
+from flare_ai_consensus.consensus.confidence import (
+    run_confident_consensus,
+    send_round,
+    extract_price_and_explanation
+)
+
+# Import sample data
 from sample import sample_data
 from dotenv import load_dotenv
 
 
+# Load environment variables
 load_dotenv()
 
 
@@ -48,6 +55,11 @@ def format_and_print_responses(responses, title="Model Responses"):
     for model_id, response in responses.items():
         print_colored(f"Model: {model_id}", "yellow")
         
+        # Extract price from response
+        price, _ = extract_price_and_explanation(response)
+        if price > 0:
+            print_colored(f"Estimated price: ${price:.2f}", "green")
+        
         # Format and wrap the response text
         wrapped_text = textwrap.fill(response, width=terminal_width-4)
         indented_text = textwrap.indent(wrapped_text, "  ")
@@ -69,6 +81,17 @@ async def patch_provider_for_logging(provider):
 
 
 async def main():
+    # Handle command line arguments
+    import sys
+    
+    # Default number of challenge rounds
+    num_challenges = 3
+    
+    # Check if challenge rounds specified
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        num_challenges = int(sys.argv[1])
+        print_colored(f"Using {num_challenges} challenge rounds", "yellow")
+    
     # Load API key from environment variable
     api_key = os.environ.get("OPEN_ROUTER_API_KEY", "")
     if not api_key:
@@ -83,12 +106,11 @@ async def main():
     config_path = Path("config")
     config_path.mkdir(exist_ok=True)
     
-    
     # Load or create the consensus configuration
     config_file = config_path / "consensus_config.json"
         
     if not config_file.exists():
-        # Fall back to default configuration if free_models.json isn't available
+        # Default configuration
         default_config = {
             "models": [
                 {
@@ -155,7 +177,8 @@ async def main():
     nft_appraisal_conversation = [
         {
             "role": "system",
-            "content": """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this current date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response start with the price in USD, followed by a detailed explanation of your reasoning.
+            "content": """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this current date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST start with the price in USD, followed by a detailed explanation of your reasoning.
+            
             The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means, but the actual values are fake so don't learn from them.
             In the json, the price of ethereum (price_ethereum) was how much ethereum was paid at the time and the price in usd (price_usd) is the price of that ethereum at the time of the sale in USD. 
             {
@@ -191,7 +214,6 @@ async def main():
                     }
                 ]
             }            
-            
             """
         },
         {
@@ -211,23 +233,24 @@ async def main():
     print_colored(f"Aggregator: {aggregator_model.model_id} (max_tokens: {aggregator_model.max_tokens})", "yellow")
     
     try:
-        # Step 1: Get individual model responses
-        print_colored("\nGetting individual model responses...", "magenta")
-        individual_responses = await send_round(
+        # Step 1: Get initial model responses
+        print_colored("\nGetting initial model responses...", "magenta")
+        initial_responses = await send_round(
             provider=provider,
             consensus_config=settings.consensus_config,
             initial_conversation=nft_appraisal_conversation
         )
         
         # Display individual responses
-        format_and_print_responses(individual_responses, "<INDIVIDUAL MODEL RESPONSES>")
+        format_and_print_responses(initial_responses, "<INITIAL MODEL RESPONSES>")
         
-        # Step 2: Run the single consensus process
-        print_colored("\nRunning consensus aggregation...", "magenta")
-        consensus_result = await run_consensus(
+        # Step 2: Run the confidence-based consensus with challenge rounds
+        print_colored(f"\nRunning confidence-based consensus with {num_challenges} challenge rounds...", "magenta")
+        final_consensus = await run_confident_consensus(
             provider=provider,
             consensus_config=settings.consensus_config,
-            initial_conversation=nft_appraisal_conversation
+            initial_conversation=nft_appraisal_conversation,
+            num_challenges=num_challenges
         )
         
         # Display the final consensus result
@@ -235,8 +258,13 @@ async def main():
         print_colored("FINAL CONSENSUS RESULT".center(80), "green")
         print_colored("=" * 80 + "\n", "green")
         
+        # Extract price from final consensus
+        price, explanation = extract_price_and_explanation(final_consensus)
+        if price > 0:
+            print_colored(f"Final estimated price: ${price:.2f}", "green")
+        
         # Format and wrap the consensus text
-        wrapped_text = textwrap.fill(consensus_result, width=76)
+        wrapped_text = textwrap.fill(final_consensus, width=76)
         indented_text = textwrap.indent(wrapped_text, "  ")
         print(indented_text)
         
@@ -246,9 +274,9 @@ async def main():
         results_dir = Path("results")
         results_dir.mkdir(exist_ok=True)
         
-        results_file = results_dir / "latest_consensus_result.txt"
+        results_file = results_dir / "confident_consensus_result.txt"
         with open(results_file, "w") as f:
-            f.write(consensus_result)
+            f.write(final_consensus)
         
         print_colored(f"\nSaved consensus result to {results_file}", "green")
         
