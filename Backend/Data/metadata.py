@@ -89,3 +89,4 @@ def main(contract_address, token_id):
     json = parse_nft_data(metadata)
     return json
 
+

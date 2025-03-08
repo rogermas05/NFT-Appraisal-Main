@@ -1,3 +1,6 @@
-sample_data = '''
-{'name': 'World Of Women', 'token_id': '4267', 'token_address': '0xe785e82358879f061bc3dcac6f0444462d4b5330', 'metadata': {'symbol': 'WOW', 'rarity_rank': 6665, 'rarity_percentage': 66.65, 'amount': '1'}, 'sales_history': [{'price': 0.37, 'date': '2025-03-05 14:42:35'}, {'price': 0.338, 'date': '2025-02-17 23:20:47'}, {'price': 0.339, 'date': '2025-02-17 23:19:59'}, {'price': 0.353, 'date': '2025-02-17 19:02:11'}, {'price': 0.355, 'date': '2025-02-17 07:45:35'}, {'price': 2.8, 'date': '2023-03-20 11:37:59'}, {'price': 7.8, 'date': '2022-04-14 23:56:08'}, {'price': 5.0, 'date': '2022-01-12 08:17:04'}, {'price': 2.85, 'date': '2021-11-18 18:24:20'}, {'price': 3.95, 'date': '2021-09-29 22:31:57'}, {'price': 3.96, 'date': '2021-08-28 14:34:48'}, {'price': 0.08, 'date': '2021-07-27 19:59:21'}, {'price': 0.07, 'date': '2021-07-27 19:24:18'}]}
-'''
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from Backend.Data import metadata
+
+sample_data = metadata.main("0xe785e82358879f061bc3dcac6f0444462d4b5330", "4267")

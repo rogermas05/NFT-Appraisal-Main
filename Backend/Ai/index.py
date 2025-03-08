@@ -260,7 +260,44 @@ async def main():
     nft_appraisal_conversation = [
         {
             "role": "system",
-            "content": "You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this current date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST start with the price in USD, followed by a detailed explanation of your reasoning."
+            "content": """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this current date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response start with the price in USD, followed by a detailed explanation of your reasoning.
+            The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means, but the actual values are fake so don't learn from them.
+            In the json, the price of ethereum (price_ethereum) was how much ethereum was paid at the time and the price in usd (price_usd) is the price of that ethereum at the time of the sale in USD. 
+            {
+                "name": "World Of Women",
+                "token_id": "4267",
+                "token_address": "0xe785e82358879f061bc3dcac6f0444462d4b5330",
+                "metadata": {
+                    "symbol": "WOW",
+                    "rarity_rank": 6665,
+                    "rarity_percentage": 66.65,
+                    "amount": "1"
+                },
+                "sales_history": [
+                    {
+                        "price_ethereum": 0.37,
+                        "price_usd": 804.02931,
+                        "date": "2025-03-05 14:42:35"
+                    },
+                    {
+                        "price_ethereum": 0.338,
+                        "price_usd": 900.05486,
+                        "date": "2024-02-17 23:20:47"
+                    },
+                    {
+                        "price_ethereum": 0.339,
+                        "price_usd": 928.88703,
+                        "date": "2023-02-17 23:19:59"
+                    },
+                    {
+                        "price_ethereum": 0.353,
+                        "price_usd": 939.99812,
+                        "date": "2022-02-14 19:02:11"
+                    }
+                ]
+            }            
+            
+            """
         },
         {
             "role": "user",
