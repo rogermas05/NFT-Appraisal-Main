@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, SwitchCamera } from "lucide-react"
+import { Search, SwitchCamera, X } from "lucide-react"
 import { useState } from "react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
@@ -19,6 +19,12 @@ export default function Header() {
   const [contractAddress, setContractAddress] = useState("")
   const [tokenId, setTokenId] = useState("")
   const { setNftData, setIsLoading } = useNFTData()
+
+  const clearInputs = () => {
+    setNftLink("")
+    setContractAddress("")
+    setTokenId("")
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -84,10 +90,19 @@ export default function Header() {
             >
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={clearInputs}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 z-10 hover:bg-transparent hover:opacity-70"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
                 <Input
                   type="url"
                   placeholder="Enter NFT link..."
-                  className="pl-10 w-full"
+                  className="pl-10 pr-10 w-full"
                   value={nftLink}
                   onChange={(e) => setNftLink(e.target.value)}
                 />
@@ -103,17 +118,37 @@ export default function Header() {
               }`}
             >
               <div className="relative flex-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={clearInputs}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 z-10 hover:bg-transparent"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
                 <Input
                   type="text"
                   placeholder="Contract Address"
+                  className="pr-10"
                   value={contractAddress}
                   onChange={(e) => setContractAddress(e.target.value)}
                 />
               </div>
               <div className="relative flex-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={clearInputs}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 z-10 hover:bg-transparent"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
                 <Input
                   type="text"
                   placeholder="Token ID"
+                  className="pr-10"
                   value={tokenId}
                   onChange={(e) => setTokenId(e.target.value)}
                 />
