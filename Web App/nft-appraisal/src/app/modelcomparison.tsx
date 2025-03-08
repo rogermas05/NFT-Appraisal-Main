@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Select,
   SelectContent,
@@ -20,11 +20,168 @@ const AVAILABLE_MODELS = [
 
 type ModelId = typeof AVAILABLE_MODELS[number]["id"]
 
+// Add these types for our animation
+type Node = {
+  id: string;
+  x: number;
+  y: number;
+  active: boolean;
+  value?: number;
+}
+
+type Connection = {
+  from: string;
+  to: string;
+  active: boolean;
+  value?: number;
+}
+
+type ConsensusStep = {
+  activeNodes: string[];
+  activeConnections: string[];
+  nodeValues?: Record<string, number>;
+  connectionValues?: Record<string, number>;
+}
+
+function NetworkAnimation({ steps, currentStep }: { steps: ConsensusStep[], currentStep: number }) {
+  // Define initial network structure with new layout
+  const nodes: Node[] = [
+    // Three LLM nodes on top
+    { id: 'llm1', x: 75, y: 50, active: false },
+    { id: 'llm2', x: 150, y: 50, active: false },
+    { id: 'llm3', x: 225, y: 50, active: false },
+    // Aggregator node at bottom center
+    { id: 'aggregator', x: 150, y: 200, active: false },
+  ];
+
+  const connections: Connection[] = [
+    // Connect each LLM to the aggregator
+    { from: 'llm1', to: 'aggregator', active: false },
+    { from: 'llm2', to: 'aggregator', active: false },
+    { from: 'llm3', to: 'aggregator', active: false },
+  ];
+
+  // Update active states based on current step
+  const currentStepData = steps[currentStep];
+  if (currentStepData) {
+    nodes.forEach(node => {
+      node.active = currentStepData.activeNodes.includes(node.id);
+      node.value = currentStepData.nodeValues?.[node.id];
+    });
+    
+    connections.forEach(conn => {
+      const connId = `${conn.from}-${conn.to}`;
+      conn.active = currentStepData.activeConnections.includes(connId);
+      conn.value = currentStepData.connectionValues?.[connId];
+    });
+  }
+
+  return (
+    <svg width="300" height="300" className="bg-gray-900/50 rounded-lg">
+      {/* Draw connections */}
+      {connections.map(conn => {
+        const fromNode = nodes.find(n => n.id === conn.from)!;
+        const toNode = nodes.find(n => n.id === conn.to)!;
+        return (
+          <g key={`${conn.from}-${conn.to}`}>
+            <line
+              x1={fromNode.x}
+              y1={fromNode.y}
+              x2={toNode.x}
+              y2={toNode.y}
+              stroke={conn.active ? "#8B5CF6" : "#374151"}
+              strokeWidth="2"
+              className="transition-colors duration-300"
+            />
+            {conn.value && (
+              <text
+                x={(fromNode.x + toNode.x) / 2}
+                y={(fromNode.y + toNode.y) / 2 - 5}
+                fill="#9CA3AF"
+                textAnchor="middle"
+                fontSize="12"
+              >
+                {conn.value.toFixed(2)}
+              </text>
+            )}
+          </g>
+        );
+      })}
+      
+      {/* Draw nodes */}
+      {nodes.map(node => (
+        <g key={node.id}>
+          <circle
+            cx={node.x}
+            cy={node.y}
+            r="20"
+            fill={node.active ? "#8B5CF6" : "#374151"}
+            className="transition-colors duration-300"
+          />
+          <text
+            x={node.x}
+            y={node.y - 30}
+            fill="#9CA3AF"
+            textAnchor="middle"
+            fontSize="14"
+          >
+            {node.id.toUpperCase()}
+          </text>
+          {node.value && (
+            <text
+              x={node.x}
+              y={node.y}
+              fill="#ffffff"
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize="12"
+            >
+              {node.value.toFixed(2)}
+            </text>
+          )}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 export default function ModelComparison() {
   const [model1, setModel1] = useState<ModelId>("regression")
   const [model2, setModel2] = useState<ModelId>("neural")
   const [showAnimation1, setShowAnimation1] = useState(false)
   const [showAnimation2, setShowAnimation2] = useState(false)
+  const [currentStep, setCurrentStep] = useState(0);
+  const [consensusSteps, setConsensusSteps] = useState<ConsensusStep[]>([]);
+
+  // Simulated webhook response handler
+  useEffect(() => {
+    const simulatedSteps: ConsensusStep[] = [
+      {
+        activeNodes: ['llm1', 'llm2', 'llm3'],
+        activeConnections: [],
+        nodeValues: { llm1: 0.3, llm2: 0.5, llm3: 0.7 }
+      },
+      {
+        activeNodes: ['llm1', 'llm2', 'llm3', 'aggregator'],
+        activeConnections: ['llm1-aggregator', 'llm2-aggregator', 'llm3-aggregator'],
+        nodeValues: { llm1: 0.3, llm2: 0.5, llm3: 0.7, aggregator: 0.5 },
+        connectionValues: { 
+          'llm1-aggregator': 0.3,
+          'llm2-aggregator': 0.5,
+          'llm3-aggregator': 0.7
+        }
+      },
+      // Add more steps as needed
+    ];
+    setConsensusSteps(simulatedSteps);
+  }, []);
+
+  // Replace the animation placeholder with our network animation
+  const animationContent = (
+    <div className="h-[300px] flex items-center justify-center">
+      <NetworkAnimation steps={consensusSteps} currentStep={currentStep} />
+    </div>
+  );
 
   return (
     <div className="flex-1 flex gap-6 p-6">
@@ -67,20 +224,13 @@ export default function ModelComparison() {
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Add toggle switch */}
+                {/* Replace toggle with button - Front side Model 1 */}
                 <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-400">Show Animation</label>
                   <button
-                    className={`w-12 h-6 rounded-full transition-colors ${
-                      showAnimation1 ? 'bg-blue-500' : 'bg-gray-600'
-                    }`}
+                    className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-full text-sm hover:bg-blue-500/30 transition-colors"
                     onClick={() => setShowAnimation1(!showAnimation1)}
                   >
-                    <div
-                      className={`w-4 h-4 bg-white rounded-full transform transition-transform ${
-                        showAnimation1 ? 'translate-x-7' : 'translate-x-1'
-                      }`}
-                    />
+                    Show Animation
                   </button>
                 </div>
               </div>
@@ -105,9 +255,7 @@ export default function ModelComparison() {
                   </div>
                 </>
               ) : (
-                <div className="h-[300px] flex items-center justify-center">
-                  <p className="text-gray-400">Animation Placeholder</p>
-                </div>
+                animationContent
               )}
             </div>
           </div>
@@ -141,25 +289,18 @@ export default function ModelComparison() {
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Toggle switch */}
+                {/* Replace toggle with button - Back side Model 1 */}
                 <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-400">Show Prediction</label>
                   <button
-                    className={`w-12 h-6 rounded-full transition-colors ${
-                      !showAnimation1 ? 'bg-blue-500' : 'bg-gray-600'
-                    }`}
+                    className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-full text-sm hover:bg-blue-500/30 transition-colors"
                     onClick={() => setShowAnimation1(!showAnimation1)}
                   >
-                    <div
-                      className={`w-4 h-4 bg-white rounded-full transform transition-transform ${
-                        !showAnimation1 ? 'translate-x-7' : 'translate-x-1'
-                      }`}
-                    />
+                    Show Prediction
                   </button>
                 </div>
               </div>
               <div className="flex-1 flex items-center justify-center mt-6">
-                <p className="text-gray-400">Animation Placeholder</p>
+                {animationContent}
               </div>
             </div>
           </div>
@@ -205,20 +346,13 @@ export default function ModelComparison() {
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Add toggle switch */}
+                {/* Replace toggle with button - Front side Model 2 */}
                 <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-400">Show Animation</label>
                   <button
-                    className={`w-12 h-6 rounded-full transition-colors ${
-                      showAnimation2 ? 'bg-purple-500' : 'bg-gray-600'
-                    }`}
+                    className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-full text-sm hover:bg-purple-500/30 transition-colors"
                     onClick={() => setShowAnimation2(!showAnimation2)}
                   >
-                    <div
-                      className={`w-4 h-4 bg-white rounded-full transform transition-transform ${
-                        showAnimation2 ? 'translate-x-7' : 'translate-x-1'
-                      }`}
-                    />
+                    Show Animation
                   </button>
                 </div>
               </div>
@@ -243,9 +377,7 @@ export default function ModelComparison() {
                   </div>
                 </>
               ) : (
-                <div className="h-[300px] flex items-center justify-center">
-                  <p className="text-gray-400">Animation Placeholder</p>
-                </div>
+                animationContent
               )}
             </div>
           </div>
@@ -279,25 +411,18 @@ export default function ModelComparison() {
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Toggle switch */}
+                {/* Replace toggle with button - Back side Model 2 */}
                 <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-400">Show Prediction</label>
                   <button
-                    className={`w-12 h-6 rounded-full transition-colors ${
-                      !showAnimation2 ? 'bg-purple-500' : 'bg-gray-600'
-                    }`}
+                    className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-full text-sm hover:bg-purple-500/30 transition-colors"
                     onClick={() => setShowAnimation2(!showAnimation2)}
                   >
-                    <div
-                      className={`w-4 h-4 bg-white rounded-full transform transition-transform ${
-                        !showAnimation2 ? 'translate-x-7' : 'translate-x-1'
-                      }`}
-                    />
+                    Show Prediction
                   </button>
                 </div>
               </div>
               <div className="flex-1 flex items-center justify-center mt-6">
-                <p className="text-gray-400">Animation Placeholder</p>
+                {animationContent}
               </div>
             </div>
           </div>
