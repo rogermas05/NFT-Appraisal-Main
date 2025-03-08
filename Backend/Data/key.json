@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "nft-appraisal",
+  "private_key_id": "b088568a508fe0e5d248cb8abc847d7dd8ea07bb",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQChS7ERiUzBcNrk\n3bY+oTxPuSbUpuud88KbLQoiiR5XhDV1o3sMekRYAK6N58EIAR1DiPZMihNj41Ij\nCag7XhrGfGjT3Kk8hI0O0VXMN2NpYffqu7mcsF4yLY/d5hPQuOqoXFK0FiZYKgh3\n8/ypw9h+hdLSzHqEzFo67iAXrRWUFcus/D935UpknHYms+LGbVXVOsPOoSgcVDs5\nA9IQJ7uj2VXCno/NtICGojBAK96u5KyurdN7LL1FuNssx0vjgaKAfTnyCupMkEaN\n3kjGLsA21iXGsZ9JSF2hIjvcEEk3zisuyO/qq3nj4/OnfjBGIwy2KPT8PFeVvXX6\nHN2lnSTJAgMBAAECggEABnLkiDc1WKmWst5TbkMbinN0ZD2tP3IyxmoBVPqm+ihI\ny+SGo6vSxjL2x6krrFKBFUVpVYuStWRuEQUOkxsS1ns8ZLYWlRsWmbBQbhsL0DeQ\nxjONuwBJL9fm/9/2TFrMVQFl9BnLnCxIDOW2JSJ1qi9XC8MNpfgWpnMFWPT8XyCE\nq8pLUa5wRdABcWYrH1UfpDRaHhrYowkBbm91v0+1rIbWCQg6V6Kx0FTWRIhyCKf7\ncsoTM+6AByv+BBNz5u2Bpgu2bnjqQE9n3jzz1p1CmVEOoeOfA6xToQHabqQwJK9/\nUW3j4Xa6fqZq59I/yGifI6p09O4IpbdFZ54HWuSMYQKBgQDZucth7qaFF+Qrsxlt\n86wg/iYAcT2XysKESsLpMSqM4SxVHELP9x/0QsKQCceaAUtro/U2jUFjLtoOQiui\nIqf/DX822q+Vf9qa/EhqwDznSLnSxvMgA231xKVo8vPpuvyAoasES4/vhbOIsu0w\nEKe+fslULHkdMEVDvtoUzqyFeQKBgQC9pmbPUrP90cLLCO2GMH+zYRV25NR1JSA9\nFFGMvL/HfgQF9oU8TDVLdnF7r2XAbjB8AIiYCy9twlt49eVCGsrg0xHleEpuf1DA\nojAIBygGpYD8OMCIrBaCy0UEsIfKmq1eviRpYF+FDhuNo+ABiXCzSK58KRYYWQVJ\n3IvwyEtV0QKBgQDOkQm3FlcCexJNq5R6zu8GNloTnVyUgRhfrxaRa8Y09wW6kh+J\nc6rrcdNqGP04zfWiYGIrqYTZ9v+G+5yuLTc6MrH5dy2TJ0ReOvDx5wVhYYx7v6m3\nO8m9nR5aHfbwUCl0WO4KGy6qTy1wimGicorTnzKgG7mkycFNbus1RohD8QKBgAMX\n7MNi+Pah7kh7i8xNjDez1LLMxr5mbaExbKccCRDK+GvUepXiNFhXxUAcO0+pPHc5\nVwEL5aknq3BMqoGqiDakmr0gei5VO075Fkl7PGbnWjRDBLj1/aQChsytyHlAjqVl\n+pgRb11vPnnP+35q7ICwJdB2pxqckR6ET3ANBFWRAoGACqfPnz/86J9Y2/tSZIdH\nt2ZKc9ViojNjDpbHmmn9bMOjbLXTjVaFW9EoYs6TiuD/5A9sR+hgVfNyjhoOwJCC\nfYysycQYJwEk7IRUpuFGfdFfqsP1t8KWOsX2NTIBS5XQrstVCZ+8foPoNaqJn77r\nxE6ZXH55VukVJ3ds+vWAwUE=\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@nft-appraisal.iam.gserviceaccount.com",
+  "client_id": "116594932016501395717",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40nft-appraisal.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
