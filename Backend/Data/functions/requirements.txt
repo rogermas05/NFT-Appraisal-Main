@@ -1,0 +1,5 @@
+firebase-functions
+firebase-admin
+moralis
+python-dotenv
+requests
