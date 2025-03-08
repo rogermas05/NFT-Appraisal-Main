@@ -80,6 +80,33 @@ def extract_price_and_explanation(text: str) -> Tuple[float, str]:
     Returns:
         tuple: (price_estimate, explanation_text)
     """
+    COLORS = {
+        "red": "\033[91m",
+        "green": "\033[92m",
+        "yellow": "\033[93m",
+        "blue": "\033[94m",
+        "magenta": "\033[95m",
+        "cyan": "\033[96m",
+        "reset": "\033[0m"
+    }
+    
+    if not isinstance(text, str):
+        print(f"{COLORS['red']}Error: expected string but got {type(text)}{COLORS['reset']}")
+        if isinstance(text, dict) and 'content' in text:
+            # Try to extract content from dict if it exists
+            text = text.get('content', '')
+            print(f"{COLORS['yellow']}Extracted content from dictionary{COLORS['reset']}")
+        elif isinstance(text, dict):
+            # Convert dict to string representation
+            text = str(text)
+            print(f"{COLORS['yellow']}Converted dictionary to string{COLORS['reset']}")
+        else:
+            # Default to empty string for other types
+            text = str(text) if text is not None else ""
+            print(f"{COLORS['yellow']}Converted to string{COLORS['reset']}")
+    
+    print(f"{COLORS['blue']}Extracting price from response of length {len(text)}{COLORS['reset']}")
+    
     # Try to extract a dollar amount from the beginning of the text
     price_match = re.search(r'^\$?([0-9,]+\.?[0-9]*)', text.strip())
     price = None

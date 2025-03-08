@@ -4,6 +4,7 @@ import os
 import json
 from pathlib import Path
 import textwrap
+import time
 import structlog
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
@@ -291,6 +292,8 @@ async def main():
         # Display individual responses
         format_and_print_responses(initial_responses, "<INITIAL MODEL RESPONSES>")
         logger.info("Initial responses collected", model_count=len(initial_responses))
+        
+        time.sleep(3)
         
         # Step 2: Run the confidence-based consensus with challenge rounds
         print_colored(f"\nRunning confidence-based consensus with {num_challenges} challenge rounds...", "magenta")
