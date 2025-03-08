@@ -86,50 +86,54 @@ async def main():
     
     # Load or create the consensus configuration
     config_file = config_path / "consensus_config.json"
+    
+    appraisal_date = "March, 2025"
         
-    if not config_file.exists():
-        # Fall back to default configuration if free_models.json isn't available
+    # if not config_file.exists():
+    if True:
         default_config = {
             "models": [
-                {
-                    "id": "meta-llama/llama-3.2-3b-instruct:free",
-                    "max_tokens": 3500,
-                    "temperature": 0.7
-                },
-                {
-                    "id": "qwen/qwen-vl-plus:free",
-                    "max_tokens": 3500,
-                    "temperature": 0.7
-                },
-                {
-                    "id": "deepseek/deepseek-chat:free",
-                    "max_tokens": 3500,
-                    "temperature": 0.7
-                }
-            ],
+        {
+            "id": "meta-llama/llama-3.2-3b-instruct:free",
+            "max_tokens": 3500,
+            "temperature": 0.7
+        },
+        {
+            "id": "google/gemini-2.0-flash-001",
+            "max_tokens": 3500,
+            "temperature": 0.7
+        },
+        
+        {
+            "id": "perplexity/sonar-reasoning",
+            "max_tokens": 3500,
+            "temperature": 0.7
+        }
+    ],
             "aggregator": [
                 {
                     "model": {
-                        "id": "meta-llama/llama-3.2-3b-instruct:free",
+                        "id": "google/gemini-flash-1.5-8b-exp",
                         "max_tokens": 3500,
-                        "temperature": 0.5
+                        "temperature": 0.65
                     },
                     "aggregator_context": [
                         {
                             "role": "system",
-                            "content": "Your role is to objectively evaluate responses from multiple large-language models and combine them into a single coherent response. Focus on accuracy and completeness in your synthesis."
+                            "content": "Your role is to objectively evaluate responses from multiple large-language models and combine them into a single coherent response. Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Focus on accuracy and completeness in your synthesis."
                         }
                     ],
                     "aggregator_prompt": [
                         {
                             "role": "user",
-                            "content": "You have been provided with responses from various models to the latest query. Synthesize these responses into a single, high-quality answer. If the models disagree on any point, note this and explain the different perspectives. Your response should be well-structured, comprehensive, and accurate."
+                            "content": """You have been provided with responses from various models to the latest query. Synthesize these responses into a single, high-quality answer. If the models disagree on any point, note this and explain the different perspectives. Your response should be well-structured, comprehensive, and accurate. Your response should be in JSON format like the models, and start with a SINGLE VALUE USD prediction of the NFT Price. Then there will be an explanation component where you will conduct your thorough discussion. Ensure that you are following the JSON format.
+                            """
                         }
                     ]
                 }
             ],
             "aggregated_prompt_type": "system",
-            "improvement_prompt": "Please provide an improved answer based on the consensus responses.",
+            "improvement_prompt": "Please provide an improved answer based on the consensus responses. Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers",
             "iterations": 1
         }
         
@@ -152,51 +156,59 @@ async def main():
     provider = await patch_provider_for_logging(provider)
     
     # Define the NFT appraisal conversation
+    # Define the NFT appraisal conversation
     nft_appraisal_conversation = [
         {
             "role": "system",
-            "content": """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this current date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response start with the price in USD, followed by a detailed explanation of your reasoning.
-            The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means, but the actual values are fake so don't learn from them.
-            In the json, the price of ethereum (price_ethereum) was how much ethereum was paid at the time and the price in usd (price_usd) is the price of that ethereum at the time of the sale in USD. 
+            "content": """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this specific date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST be in JSON format starting with a single value of price in USD, followed by a detailed explanation of your reasoning.
+
+            The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means. Your analysis and appraisal should be more nuanced, smart, and data-driven than the example. 
+            
+            Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers
+
+            In the JSON, the price of Ethereum (price_ethereum) was how much Ethereum was paid at the time and the price in USD (price_usd) is the price of that Ethereum at the time of the sale in USD. 
+
+            Example Input:
             {
-                "name": "World Of Women",
-                "token_id": "4267",
-                "token_address": "0xe785e82358879f061bc3dcac6f0444462d4b5330",
+                "name": "Art Blocks",
+                "token_id": "78000956",
+                "token_address": "0xa7d8d9ef8d8ce8992df33d8b8cf4aebabd5bd270",
                 "metadata": {
-                    "symbol": "WOW",
-                    "rarity_rank": 6665,
-                    "rarity_percentage": 66.65,
+                    "symbol": "BLOCKS",
+                    "rarity_rank": "None",
+                    "rarity_percentage": "None",
                     "amount": "1"
                 },
                 "sales_history": [
                     {
-                        "price_ethereum": 0.37,
-                        "price_usd": 804.02931,
-                        "date": "2025-03-05 14:42:35"
+                        "price_ethereum": 24.61,
+                        "price_usd": 61914.7812,
+                        "date": "2025-03-03 17:49:35"
                     },
                     {
-                        "price_ethereum": 0.338,
-                        "price_usd": 900.05486,
-                        "date": "2024-02-17 23:20:47"
+                        "price_ethereum": 85.0,
+                        "price_usd": 108403.25579,
+                        "date": "2022-12-13 19:04:11"
                     },
                     {
-                        "price_ethereum": 0.339,
-                        "price_usd": 928.88703,
-                        "date": "2023-02-17 23:19:59"
-                    },
-                    {
-                        "price_ethereum": 0.353,
-                        "price_usd": 939.99812,
-                        "date": "2022-02-14 19:02:11"
+                        "price_ethereum": 0.17,
+                        "price_usd": 422.72201,
+                        "date": "2021-06-11 09:21:07"
                     }
                 ]
-            }            
+            }
+
+            Example Output:
+            {
+                "price": 67240,
+                "explanation": "Based on the sales history, the price of the NFT has been increasing over time. The most recent sale was for 24.61 ETH, which is worth $61914.7812 at the time of the sale. The previous sale was for 85 ETH, which is worth $108403.25579 at the time of the sale. The first sale was for 0.17 ETH, which is worth $422.72201 at the time of the sale. Based on this data, I estimate that the price of the NFT is currently $67240. Additional context on the rarity would help improve the response and the price estimate, however, with the given data, this seems a reasonable estimate for this date."
+            }
             
             """
-        },
+            },
         {
             "role": "user",
-            "content": f"Here is the sample data: {sample_data}"
+            "content": f"Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Here is the sample data: {sample_data}. "
         }
     ]
     

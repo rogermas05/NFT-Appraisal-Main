@@ -6,13 +6,12 @@
             "temperature": 0.7
         },
         {
-            "id": "google/gemini-2.0-flash-001",
+            "id": "liquid/lfm-3b",
             "max_tokens": 3500,
             "temperature": 0.7
         },
-        
         {
-            "id": "openai/o3-mini",
+            "id": "google/gemini-2.0-flash-001",
             "max_tokens": 3500,
             "temperature": 0.7
         }
@@ -22,23 +21,23 @@
             "model": {
                 "id": "google/gemini-flash-1.5-8b-exp",
                 "max_tokens": 3500,
-                "temperature": 0.5
+                "temperature": 0.65
             },
             "aggregator_context": [
                 {
                     "role": "system",
-                    "content": "Your role is to objectively evaluate responses from multiple large-language models and combine them into a single coherent response. Focus on accuracy and completeness in your synthesis."
+                    "content": "Your role is to objectively evaluate responses from multiple large-language models and combine them into a single coherent response. Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Focus on accuracy and completeness in your synthesis."
                 }
             ],
             "aggregator_prompt": [
                 {
                     "role": "user",
-                    "content": "You have been provided with responses from various models to the latest query. Synthesize these responses into a single, high-quality answer. If the models disagree on any point, note this and explain the different perspectives. Your response should be well-structured, comprehensive, and accurate."
+                    "content": "You have been provided with responses from various models to the latest query. Synthesize these responses into a single, high-quality answer. If the models disagree on any point, note this and explain the different perspectives. Your response should be well-structured, comprehensive, and accurate. Your response should be in JSON format like the models, and start with a SINGLE VALUE USD prediction of the NFT Price. Then there will be an explanation component where you will conduct your thorough discussion. Ensure that you are following the JSON format.\n                            "
                 }
             ]
         }
     ],
     "aggregated_prompt_type": "system",
-    "improvement_prompt": "Please provide an improved answer based on the consensus responses.",
+    "improvement_prompt": "Please provide an improved answer based on the consensus responses. Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers",
     "iterations": 1
 }
