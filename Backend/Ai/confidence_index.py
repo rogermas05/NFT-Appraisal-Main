@@ -60,23 +60,53 @@ def format_and_print_responses(responses, title="Model Responses"):
     terminal_width = 80
     separator = "=" * terminal_width
     
-    print_colored(f"\n{separator}", "cyan")
-    print_colored(f"{title.center(terminal_width)}", "cyan")
-    print_colored(f"{separator}\n", "cyan")
+    print(f"\n{separator}")
+    print(f"{title.center(terminal_width)}")
+    print(f"{separator}\n")
     
     for model_id, response in responses.items():
-        print_colored(f"Model: {model_id}", "yellow")
+        print(f"Model: {model_id}")
+        
+        # Ensure response is a string
+        response_text = convert_to_string(response)
         
         # Extract price from response
-        price, _ = extract_price_and_explanation(response)
-        if price > 0:
-            print_colored(f"Estimated price: ${price:.2f}", "green")
+        try:
+            price, _ = extract_price_and_explanation(response_text)
+            if price > 0:
+                print(f"Estimated price: ${price:.2f}")
+        except Exception as e:
+            print(f"Error extracting price: {e}")
         
         # Format and wrap the response text
-        wrapped_text = textwrap.fill(response, width=terminal_width-4)
-        indented_text = textwrap.indent(wrapped_text, "  ")
-        print(indented_text)
-        print_colored(f"{'-' * terminal_width}", "blue")
+        try:
+            wrapped_text = textwrap.fill(response_text, width=terminal_width-4)
+            indented_text = textwrap.indent(wrapped_text, "  ")
+            print(indented_text)
+        except Exception as e:
+            print(f"  Error formatting response: {e}")
+            print(f"  Raw response: {response_text[:500]}...")
+            
+        print(f"{'-' * terminal_width}")
+
+def convert_to_string(obj):
+    """Safely convert any object to a string"""
+    if isinstance(obj, str):
+        return obj
+    
+    if isinstance(obj, dict):
+        if 'content' in obj:
+            return str(obj.get('content', ''))
+        elif 'text' in obj:
+            return str(obj.get('text', ''))
+        elif 'message' in obj and isinstance(obj['message'], dict) and 'content' in obj['message']:
+            return str(obj['message']['content'])
+    
+    # Fallback to string representation
+    try:
+        return str(obj)
+    except:
+        return "[Error: Could not convert object to string]"
 
 
 async def patch_provider_for_logging(provider):
