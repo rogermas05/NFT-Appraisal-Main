@@ -32,7 +32,7 @@
             "aggregator_prompt": [
                 {
                     "role": "user",
-                    "content": "You have been provided with responses from various models to the latest query. Synthesize these responses into a single, high-quality answer. If the models disagree on any point, note this and explain the different perspectives. Your response should be well-structured, comprehensive, and accurate. Your response should be in JSON format like the models, and start with a SINGLE VALUE USD prediction of the NFT Price. Then there will be an explanation component where you will conduct your thorough discussion. Ensure that you are following the JSON format.\n                            "
+                    "content": "You have been provided with responses from various models to the latest query. Synthesize these responses into a single, high-quality answer and use three concise sentences at the very most. If the models disagree on any point, note this and explain the different perspective very concisely in one go. Your response should be well-structured, comprehensive, and accurate and very concise. Your response should be in JSON format like the models, and start with a SINGLE VALUE USD prediction of the NFT Price. Then there will be an explanation component where you will conduct your thorough discussion. Ensure that you are following the JSON format.\n                            "
                 }
             ]
         }
