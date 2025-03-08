@@ -81,7 +81,7 @@ export default function Header() {
   return (
     <header className="w-full bg-bgcol p-3 border-b border-gray-700">
       <div className="relative px-4">
-        <div className="text-3xl font-extrabold absolute left-4 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-transparent bg-clip-text tracking-tight">
+        <div className="text-3xl font-extrabold absolute left-4 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-transparent bg-clip-text tracking-tight cursor-pointer transition-transform duration-200 hover:opacity-90">
           NFT Appraiser
         </div>
         <form onSubmit={handleSubmit} className="w-full max-w-lg mx-auto">
