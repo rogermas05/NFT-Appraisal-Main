@@ -24,6 +24,7 @@ async def run_confident_consensus(
     consensus_config: ConsensusConfig,
     initial_conversation: List[Message],
     num_challenges: int = 3,  # Number of challenge iterations
+    response_collector: Optional[Dict[str, Dict[str, str]]] = None
 ) -> str:
     """
     Run the confidence-based consensus process with challenge rounds.
@@ -33,22 +34,24 @@ async def run_confident_consensus(
         consensus_config: Configuration for the consensus process
         initial_conversation: The input user prompt with system instructions
         num_challenges: Number of challenge rounds to run
+        response_collector: Optional dictionary to collect all responses
         
     Returns:
         Final aggregated response
     """
     # Store all responses from different iterations
-    all_model_responses = {}
+    all_model_responses = response_collector or {}
     
-    # Step 1: Get initial responses from all models
-    logger.info("Getting initial responses from models")
-    initial_responses = await send_round(
-        provider, consensus_config, initial_conversation
-    )
-    
-    # Initialize the all_model_responses dictionary
-    for model_id, response in initial_responses.items():
-        all_model_responses[model_id] = {"initial": response}
+    # Step 1: Get initial responses from all models if not already provided
+    if not all(model_id in all_model_responses for model_id in [m.model_id for m in consensus_config.models]):
+        logger.info("Getting initial responses from models")
+        initial_responses = await send_round(
+            provider, consensus_config, initial_conversation
+        )
+        
+        # Initialize the all_model_responses dictionary
+        for model_id, response in initial_responses.items():
+            all_model_responses[model_id] = {"initial": response}
     
     # Step 2: Run challenge rounds
     for i in range(num_challenges):
@@ -56,8 +59,18 @@ async def run_confident_consensus(
         
         # Select challenge prompts for each model
         challenges = await select_challenge_prompts(
-            provider, initial_responses, num_challenges=1
+            provider, {model_id: responses["initial"] for model_id, responses in all_model_responses.items()}, 
+            num_challenges=1
         )
+        
+        # Log the selected challenges
+        for model_id, challenge_list in challenges.items():
+            logger.info(
+                "Selected challenge", 
+                model_id=model_id, 
+                challenge_round=i+1,
+                challenge=challenge_list[0][:100] + "..." if len(challenge_list[0]) > 100 else challenge_list[0]
+            )
         
         # Send challenges to models
         challenge_responses = await send_challenge_round(
@@ -67,11 +80,30 @@ async def run_confident_consensus(
             challenges
         )
         
-        # Store the final response from the challenge rounds
+        # Store the response from this challenge round
         for model_id, response in challenge_responses.items():
             all_model_responses[model_id][f"challenge_{i+1}"] = response
             # Update the "final" response with the latest response
             all_model_responses[model_id]["final"] = response
+            
+            # Log response changes
+            initial_response = all_model_responses[model_id]["initial"]
+            from flare_ai_consensus.consensus.confidence.confidence_embeddings import (
+                extract_price_and_explanation, calculate_text_similarity
+            )
+            
+            initial_price, _ = extract_price_and_explanation(initial_response)
+            current_price, _ = extract_price_and_explanation(response)
+            similarity = calculate_text_similarity(initial_response, response)
+            
+            logger.info(
+                "Challenge response analysis", 
+                model_id=model_id,
+                round=i+1,
+                initial_price=f"${initial_price:.2f}",
+                current_price=f"${current_price:.2f}",
+                similarity=f"{similarity:.4f}"
+            )
     
     # Step 3: Create weighted aggregation based on confidence
     logger.info("Creating weighted aggregation based on confidence")
@@ -132,7 +164,7 @@ async def _get_response_for_model_with_challenge(
     logger.info(
         "sending challenge prompt", 
         model_id=model.model_id,
-        challenge=challenge_prompt[:50] + "..." if len(challenge_prompt) > 50 else challenge_prompt
+        challenge=challenge_prompt[:100] + "..." if len(challenge_prompt) > 100 else challenge_prompt
     )
     
     # Send request to model
@@ -149,7 +181,8 @@ async def _get_response_for_model_with_challenge(
     logger.info(
         "received challenge response", 
         model_id=model.model_id,
-        response_length=len(text)
+        response_length=len(text),
+        response_preview=text[:100] + "..." if len(text) > 100 else text
     )
     
     return model.model_id, text

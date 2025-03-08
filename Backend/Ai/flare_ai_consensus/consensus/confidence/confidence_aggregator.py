@@ -18,18 +18,6 @@ from flare_ai_consensus.consensus.confidence.confidence_prompts import CHALLENGE
 logger = structlog.get_logger(__name__)
 
 
-def _concatenate_aggregator(responses: Dict[str, str]) -> str:
-    """
-    Aggregate responses by concatenating each model's answer with a label.
-
-    Args:
-        responses: A dictionary mapping model IDs to their response texts.
-    Returns:
-        A single aggregated string.
-    """
-    return "\n\n".join([f"{model}: {text}" for model, text in responses.items()])
-
-
 def _concatenate_weighted_aggregator(
     responses: Dict[str, str], 
     weights: Dict[str, float]
@@ -76,6 +64,8 @@ async def async_weighted_llm_aggregator(
     confidence_scores = {}
     final_responses = {}
     
+    logger.info("Calculating confidence scores for aggregation")
+    
     for model_id, responses in model_responses.items():
         initial_response = responses.get("initial", "")
         final_response = responses.get("final", initial_response)
@@ -87,10 +77,16 @@ async def async_weighted_llm_aggregator(
         confidence_score = calculate_confidence_score(initial_response, final_response)
         confidence_scores[model_id] = confidence_score
         
+        # Extract prices for logging
+        initial_price, _ = extract_price_and_explanation(initial_response)
+        final_price, _ = extract_price_and_explanation(final_response)
+        
         logger.info(
-            "model confidence score", 
+            "model confidence analysis", 
             model_id=model_id,
-            confidence_score=confidence_score
+            confidence_score=f"{confidence_score:.4f}",
+            initial_price=f"${initial_price:.2f}",
+            final_price=f"${final_price:.2f}"
         )
     
     # Normalize confidence scores to get weights
@@ -104,6 +100,14 @@ async def async_weighted_llm_aggregator(
         # Equal weights if all confidence scores are 0
         weight = 1.0 / len(confidence_scores)
         weights = {model_id: weight for model_id in confidence_scores}
+    
+    # Log the normalized weights
+    for model_id, weight in weights.items():
+        logger.info(
+            "normalized weight", 
+            model_id=model_id, 
+            weight=f"{weight:.4f}"
+        )
     
     # Create weighted aggregation for the meta-model
     weighted_responses = _concatenate_weighted_aggregator(final_responses, weights)
@@ -151,8 +155,26 @@ async def async_weighted_llm_aggregator(
         temperature=aggregator_config.model.temperature,
     )
     
+    logger.info(
+        "sending aggregation request", 
+        aggregator_model=aggregator_config.model.model_id,
+        num_models_aggregated=len(model_responses)
+    )
+    
     response = await provider.send_chat_completion(payload)
-    return response.get("choices", [])[0].get("message", {}).get("content", "")
+    aggregated_text = response.get("choices", [])[0].get("message", {}).get("content", "")
+    
+    # Extract price from aggregated response
+    agg_price, _ = extract_price_and_explanation(aggregated_text)
+    
+    logger.info(
+        "received aggregated response", 
+        aggregator_model=aggregator_config.model.model_id,
+        response_length=len(aggregated_text),
+        aggregated_price=f"${agg_price:.2f}"
+    )
+    
+    return aggregated_text
 
 
 async def select_challenge_prompts(

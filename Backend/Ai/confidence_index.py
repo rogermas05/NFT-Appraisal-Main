@@ -4,6 +4,7 @@ import os
 import json
 from pathlib import Path
 import textwrap
+import structlog
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
 from flare_ai_consensus.settings import Settings, Message
@@ -15,6 +16,7 @@ from flare_ai_consensus.consensus.confidence import (
     send_round,
     extract_price_and_explanation
 )
+from flare_ai_consensus.consensus.confidence.confidence_embeddings import calculate_text_similarity
 
 # Import sample data
 from sample import sample_data
@@ -24,6 +26,15 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Configure structlog for better formatting
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+        structlog.processors.JSONRenderer(indent=2, sort_keys=True)
+    ]
+)
+
+logger = structlog.get_logger()
 
 def print_colored(text, color=None):
     """Print text with ANSI color codes"""
@@ -72,12 +83,47 @@ async def patch_provider_for_logging(provider):
     original_post = provider._post
     
     async def logged_post(endpoint, json_payload):
+        logger.info("API request", endpoint=endpoint, max_tokens=json_payload.get('max_tokens'))
         print_colored(f"Request to {endpoint}: max_tokens={json_payload.get('max_tokens')}", "blue")
         response = await original_post(endpoint, json_payload)
+        logger.info("API response received", endpoint=endpoint, status="success")
         return response
     
     provider._post = logged_post
     return provider
+
+
+# Add a function to log similarity scores
+def log_similarity_details(initial_response, final_response):
+    """Log detailed information about response similarity"""
+    from flare_ai_consensus.consensus.confidence.confidence_embeddings import extract_price_and_explanation
+    
+    initial_price, initial_explanation = extract_price_and_explanation(initial_response)
+    final_price, final_explanation = extract_price_and_explanation(final_response)
+    
+    # Calculate price change
+    if initial_price == 0 and final_price == 0:
+        price_change = 0
+    elif initial_price == 0:
+        price_change = 1
+    else:
+        price_change = abs(final_price - initial_price) / initial_price
+    
+    # Calculate text similarity
+    text_similarity = calculate_text_similarity(initial_explanation, final_explanation)
+    
+    logger.info(
+        "Response comparison",
+        initial_price=f"${initial_price:.2f}",
+        final_price=f"${final_price:.2f}",
+        price_change_pct=f"{price_change*100:.2f}%",
+        text_similarity=f"{text_similarity:.4f}"
+    )
+    
+    print_colored(f"Initial price: ${initial_price:.2f}", "cyan")
+    print_colored(f"Final price: ${final_price:.2f}", "cyan")
+    print_colored(f"Price change: {price_change*100:.2f}%", "magenta")
+    print_colored(f"Text similarity: {text_similarity:.4f}", "magenta")
 
 
 async def main():
@@ -179,16 +225,16 @@ async def main():
             "role": "system",
             "content": """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this current date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST start with the price in USD, followed by a detailed explanation of your reasoning.
             
-            The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means, but the actual values are fake so don't learn from them.
+            The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means, but don't learn from the specfic values as they will change.
             In the json, the price of ethereum (price_ethereum) was how much ethereum was paid at the time and the price in usd (price_usd) is the price of that ethereum at the time of the sale in USD. 
             {
-                "name": "World Of Women",
-                "token_id": "4267",
-                "token_address": "0xe785e82358879f061bc3dcac6f0444462d4b5330",
+                "name": "Big Brother",
+                "token_id": "1264",
+                "token_address": "0xe424361bc3dcac6f0444462d4b5330",
                 "metadata": {
                     "symbol": "WOW",
-                    "rarity_rank": 6665,
-                    "rarity_percentage": 66.65,
+                    "rarity_rank": 3223,
+                    "rarity_percentage": 16.2,
                     "amount": "1"
                 },
                 "sales_history": [
@@ -218,7 +264,7 @@ async def main():
         },
         {
             "role": "user",
-            "content": f"Here is the sample data: {sample_data}"
+            "content": f"Here is the data you need to draw on to make an NFT appraisal: {sample_data}"
         }
     ]
     
@@ -235,6 +281,7 @@ async def main():
     try:
         # Step 1: Get initial model responses
         print_colored("\nGetting initial model responses...", "magenta")
+        logger.info("Starting initial model response collection")
         initial_responses = await send_round(
             provider=provider,
             consensus_config=settings.consensus_config,
@@ -243,15 +290,33 @@ async def main():
         
         # Display individual responses
         format_and_print_responses(initial_responses, "<INITIAL MODEL RESPONSES>")
+        logger.info("Initial responses collected", model_count=len(initial_responses))
         
         # Step 2: Run the confidence-based consensus with challenge rounds
         print_colored(f"\nRunning confidence-based consensus with {num_challenges} challenge rounds...", "magenta")
+        logger.info("Starting challenge rounds", num_challenges=num_challenges)
+        
+        # Store all responses for logging
+        all_responses = {model_id: {"initial": response} for model_id, response in initial_responses.items()}
+        format_and_print_responses(all_responses, "<ITERATED MODEL RESPONSES>")
+        
+        # Run challenge rounds and collect responses
         final_consensus = await run_confident_consensus(
             provider=provider,
             consensus_config=settings.consensus_config,
             initial_conversation=nft_appraisal_conversation,
-            num_challenges=num_challenges
+            num_challenges=num_challenges,
+            response_collector=all_responses  # Pass the collector to store responses
         )
+        
+        # Log similarity details for each model
+        print_colored("\nResponse stability analysis:", "blue")
+        logger.info("Analyzing response stability")
+        for model_id, responses in all_responses.items():
+            print_colored(f"\nModel: {model_id}", "yellow")
+            initial = responses.get("initial", "")
+            final = responses.get(f"challenge_{num_challenges}", "") or responses.get("final", initial)
+            log_similarity_details(initial, final)
         
         # Display the final consensus result
         print_colored("\n" + "=" * 80, "green")
