@@ -132,7 +132,7 @@ async def main():
             "aggregator": [
                 {
                     "model": {
-                        "id": "meta-llama/llama-3.2-3b-instruct:free",
+                        "id": "google/gemini-flash-1.5-8b-exp",
                         "max_tokens": 3500,
                         "temperature": 0.5
                     },

@@ -50,7 +50,10 @@ def get_embeddings(text: str) -> np.ndarray:
             model="text-embedding-004",
             contents=text
         )
-        return np.array(result.embeddings)
+        # Convert the ContentEmbedding object to a numpy array
+        # The values are stored in the 'values' field of the embedding
+        values = result.embeddings[0].values
+        return np.array(values)
     except Exception as e:
         print(f"Error getting embeddings: {e}")
         # Fallback to simple approach
@@ -130,24 +133,35 @@ def calculate_text_similarity(text1: str, text2: str) -> float:
     embedding1 = get_embeddings(text1)
     embedding2 = get_embeddings(text2)
     
+    # Ensure embeddings are 1D arrays
+    if hasattr(embedding1, 'shape') and len(embedding1.shape) > 1:
+        embedding1 = embedding1.flatten()
+    if hasattr(embedding2, 'shape') and len(embedding2.shape) > 1:
+        embedding2 = embedding2.flatten()
+    
     # Ensure dimensions match for fallback method
-    if embedding1.shape != embedding2.shape:
+    if hasattr(embedding1, 'shape') and hasattr(embedding2, 'shape') and embedding1.shape != embedding2.shape:
         min_dim = min(embedding1.shape[0], embedding2.shape[0])
         embedding1 = embedding1[:min_dim]
         embedding2 = embedding2[:min_dim]
     
     # Calculate cosine similarity
-    dot_product = np.dot(embedding1, embedding2)
-    norm1 = np.linalg.norm(embedding1)
-    norm2 = np.linalg.norm(embedding2)
-    
-    if norm1 == 0 or norm2 == 0:
-        return 0.0
-    
-    similarity = dot_product / (norm1 * norm2)
-    
-    # Ensure value is in [0, 1] range
-    return max(0.0, min(float(similarity), 1.0))
+    try:
+        dot_product = np.dot(embedding1, embedding2)
+        norm1 = np.linalg.norm(embedding1)
+        norm2 = np.linalg.norm(embedding2)
+        
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        
+        similarity = dot_product / (norm1 * norm2)
+        
+        # Ensure value is in [0, 1] range
+        return max(0.0, min(float(similarity), 1.0))
+    except TypeError as e:
+        print(f"Error calculating similarity: {e}")
+        # If vectors can't be compared, return 0.5 as a neutral similarity
+        return 0.5
 
 
 def calculate_confidence_score(initial_response: str, final_response: str) -> float:

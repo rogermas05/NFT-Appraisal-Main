@@ -1,6 +1,13 @@
 def parse_chat_response(response: dict) -> str:
     """Parse response from chat completion endpoint"""
-    return response.get("choices", [])[0].get("message", {}).get("content", "")
+    choices = response.get("choices", [])
+    if not choices:
+        # Log the full response to help with debugging
+        import json
+        print(f"Warning: Received empty choices list. Full response: {json.dumps(response, indent=2)}")
+        return ""  # Return empty string instead of raising an exception
+        
+    return choices[0].get("message", {}).get("content", "")
 
 
 def extract_author(model_id: str) -> tuple[str, str]:
