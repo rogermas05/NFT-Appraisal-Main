@@ -4,7 +4,21 @@
  */
 import "./src/env.js";
 
-/** @type {import("next").NextConfig} */
-const config = {};
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'www.larvalabs.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'ipfs.io',
+        pathname: '/ipfs/**',
+      },
+    ],
+  },
+}
 
-export default config;
+export default nextConfig
