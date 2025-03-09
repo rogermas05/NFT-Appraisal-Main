@@ -437,7 +437,7 @@ async def process_nft_appraisal(contract_address: str, token_id: str):
 
 
 # Flask route for the API
-@app.route('/appraise', methods=['GET'])
+@app.route('/single_llm_appraisal', methods=['GET'])
 def appraise_nft_api():
     """API endpoint to appraise an NFT using a single LLM"""
     try:
@@ -484,7 +484,7 @@ if __name__ == "__main__":
         # Run as API server
         port = int(sys.argv[2]) if len(sys.argv) > 2 else 8080
         print_colored(f"Starting API server on port {port}...", "green")
-        app.run(host='0.0.0.0', port=port)
+        app.run(host='0.0.0.0', port=8083)
     elif len(sys.argv) == 3:
         # Run as CLI
         contract_address = sys.argv[1]
