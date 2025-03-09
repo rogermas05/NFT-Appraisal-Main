@@ -62,7 +62,7 @@ export default function Header() {
       const modelConfig: Record<string, {endpoint: string, port: string}> = {
         'regression': { endpoint: 'centralized_appraise', port: '8080' },
         'confidence': { endpoint: 'confidence_appraise', port: '8082' },
-        'singular': { endpoint: 'singular_model_appraise', port: '8080' } // Assuming this uses the same port as centralized
+        'singular': { endpoint: 'single_llm_appraisal', port: '8083' } // Updated to use the correct endpoint and port
       };
       
       // Create object to store model-specific API promises

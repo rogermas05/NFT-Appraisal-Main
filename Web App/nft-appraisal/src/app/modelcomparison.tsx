@@ -70,7 +70,7 @@ export default function ModelComparison() {
       return modelData.ethereum_price_usd.toFixed(decimals);
     }
 
-    // If the API only returns USD price (like confidence API), estimate ETH price
+    // If the API only returns USD price, estimate ETH price
     // Assuming current ETH price of ~$2,500 for conversion
     if (modelData.price !== undefined) {
       const estimatedEthPrice = modelData.price / 2500;
@@ -103,12 +103,28 @@ export default function ModelComparison() {
       return Math.round(modelData.final_confidence_score * 100);
     }
 
+    // Add support for the single LLM model format
+    if (modelData.confidence !== undefined) {
+      return Math.round(modelData.confidence * 100);
+    }
+
     return 0;
   };
 
   const getAccuracyPercentage = (modelData: any) => {
     if (!modelData || modelData.accuracy === undefined) return 0;
-    return Math.round(modelData.accuracy * 100);
+    
+    // Handle the case where accuracy is a number between 0 and 1
+    if (typeof modelData.accuracy === 'number') {
+      // If accuracy is already between 0-100, return as is
+      if (modelData.accuracy > 1) {
+        return Math.round(modelData.accuracy);
+      }
+      // Otherwise, convert from 0-1 to 0-100
+      return Math.round(modelData.accuracy * 100);
+    }
+    
+    return 0;
   };
 
   const getModelExplanation = (modelData: any) => {
@@ -544,7 +560,7 @@ export default function ModelComparison() {
                       </p>
                       <p className="text-3xl font-bold text-purple-400">
                         {model2Data
-                          ? `${getEthereumPrice(model2Data, 2)} ETH ($${getUsdPrice(model2Data, 2)})`
+                          ? `${getEthereumPrice(model2Data)} ETH ($${getUsdPrice(model2Data)})`
                           : "-.-- ETH"}
                       </p>
                     </div>
