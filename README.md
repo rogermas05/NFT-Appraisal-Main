@@ -1,4 +1,5 @@
 **NFT Deep Appraisal**
+
 We built NFT Deep Appraisal, a consensus learning approach for evaluating the current value of NFTs. The core implementation uses OpenRouter to distribute appraisal queries to models including Claude, Gemini, and Llama, each analyzing the NFT's sales history, rarity metrics, and market positioning. We consistently focus on prompt engineering and model verifiability, as all relevant data is fed from the Moralis API in real-time. 
 
 We developed two consensus approaches: a baseline central aggregator that combines model responses and attaches a consensus upon each evaluation, and an advanced confidence-based system that challenges each model's reasoning consistency and assigns proportional weights based on Shapley value calculations, for which we applied a weighted formula of 70% price consistency and 30% explanation coherence. 
