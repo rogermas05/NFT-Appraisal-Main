@@ -21,9 +21,11 @@ from dotenv import load_dotenv
 
 # Add Firebase Functions import and decorator
 from firebase_functions import https_fn
-from firebase_admin import initialize_app
+from firebase_admin import initialize_app, db
 
-initialize_app()
+initialize_app(options={
+    'databaseURL': 'https://nft-appraisal-default-rtdb.firebaseio.com'  # Replace with your Firebase project database URL
+})
 
 load_dotenv()
 
@@ -136,10 +138,36 @@ async def patch_provider_for_logging(provider):
     provider._post = logged_post
     return provider
 
+async def update_consensus_progress(contract_address, token_id, stage, data=None):
+    """Update the consensus progress in Firebase Realtime Database"""
+    try:
+        # Create a reference to the progress node for this specific NFT
+        progress_ref = db.reference(f'consensus_progress/{contract_address}_{token_id}')
+        
+        # Update with current stage and timestamp
+        update_data = {
+            'stage': stage,
+            'timestamp': {'.sv': 'timestamp'},  # Server timestamp
+            'contract_address': contract_address,
+            'token_id': token_id
+        }
+        
+        # Add any additional data if provided
+        if data:
+            update_data['data'] = data
+            
+        # Update the database
+        progress_ref.update(update_data)
+        print_colored(f"Updated progress: {stage}", "cyan")
+    except Exception as e:
+        print_colored(f"Error updating progress in database: {e}", "red")
+
 async def run_consensus_with_data(
     provider, 
     consensus_config, 
-    initial_conversation
+    initial_conversation,
+    contract_address=None,
+    token_id=None
 ):
     """
     Run consensus process and return both final result and all responses data.
@@ -149,6 +177,8 @@ async def run_consensus_with_data(
         provider: An instance of AsyncOpenRouterProvider
         consensus_config: Configuration for the consensus process
         initial_conversation: Initial prompt messages
+        contract_address: Contract address for progress tracking
+        token_id: Token ID for progress tracking
         
     Returns:
         tuple: (final_consensus_result, all_response_data)
@@ -157,11 +187,22 @@ async def run_consensus_with_data(
     response_data = {}
     response_data["initial_conversation"] = initial_conversation
 
+    # Update progress - Starting
+    if contract_address and token_id:
+        await update_consensus_progress(contract_address, token_id, "starting")
+
     # Step 1: Initial round
     print_colored("Running initial round of consensus...", "blue")
+    if contract_address and token_id:
+        await update_consensus_progress(contract_address, token_id, "initial_round")
+        
     responses = await send_round(
         provider, consensus_config, response_data["initial_conversation"]
     )
+    
+    if contract_address and token_id:
+        await update_consensus_progress(contract_address, token_id, "initial_aggregation")
+        
     aggregated_response = await async_centralized_llm_aggregator(
         provider, consensus_config.aggregator_config, responses
     )
@@ -173,9 +214,16 @@ async def run_consensus_with_data(
     # Step 2: Improvement rounds
     for i in range(consensus_config.iterations):
         print_colored(f"Running improvement round {i+1}...", "blue")
+        if contract_address and token_id:
+            await update_consensus_progress(contract_address, token_id, f"improvement_round_{i+1}")
+            
         responses = await send_round(
             provider, consensus_config, initial_conversation, aggregated_response
         )
+        
+        if contract_address and token_id:
+            await update_consensus_progress(contract_address, token_id, f"aggregation_{i+1}")
+            
         aggregated_response = await async_centralized_llm_aggregator(
             provider, consensus_config.aggregator_config, responses
         )
@@ -183,6 +231,12 @@ async def run_consensus_with_data(
 
         response_data[f"iteration_{i + 1}"] = responses
         response_data[f"aggregate_{i + 1}"] = aggregated_response
+
+    # Update progress - Completed
+    if contract_address and token_id:
+        await update_consensus_progress(contract_address, token_id, "completed", {
+            "final_result": aggregated_response
+        })
 
     # Return both the final consensus and all response data
     return aggregated_response, response_data
@@ -218,8 +272,14 @@ async def fetch_ethereum_price():
 
 async def process_nft_appraisal(contract_address: str, token_id: str):
     """Main processing function for NFT appraisal"""
+    # Update initial progress
+    await update_consensus_progress(contract_address, token_id, "fetching_data")
+    
     # Fetch NFT data
     metadata_data = await fetch_nft_data(contract_address, token_id)
+    
+    # Update progress after fetching data
+    await update_consensus_progress(contract_address, token_id, "preparing_models")
     
     # Load API key from environment variable
     api_key = os.environ.get("OPEN_ROUTER_API_KEY", "")
@@ -378,7 +438,9 @@ async def process_nft_appraisal(contract_address: str, token_id: str):
         consensus_result, all_responses_data = await run_consensus_with_data(
             provider=provider,
             consensus_config=settings.consensus_config,
-            initial_conversation=nft_appraisal_conversation
+            initial_conversation=nft_appraisal_conversation,
+            contract_address=contract_address,
+            token_id=token_id
         )
         
         # Get the individual responses from the tracked data
@@ -532,10 +594,24 @@ async def process_nft_appraisal(contract_address: str, token_id: str):
             
             print_colored(f"\nSaved consensus result to {results_file}", "green")
         
+        # Update progress with final result
+        await update_consensus_progress(contract_address, token_id, "finalizing", {
+            "price": final_consensus_price,
+            "confidence": final_confidence_score
+        })
+        
+        # Final update with complete data
+        await update_consensus_progress(contract_address, token_id, "complete", final_output)
+        
         # Return the final JSON string
         return final_json_string
         
     except Exception as e:
+        # Update progress with error
+        await update_consensus_progress(contract_address, token_id, "error", {
+            "error": str(e)
+        })
+        
         print_colored(f"Error during consensus process: {e}", "red")
         import traceback
         traceback.print_exc()
