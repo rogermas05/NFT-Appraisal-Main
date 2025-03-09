@@ -790,6 +790,17 @@ def generate_sse_events():
             
             # Format as SSE
             yield f"event: {event_type}\ndata: {event_data}\n\n"
+            
+            # If this is the final stage event with "complete" status, close the connection
+            if event_type == "stage" and event.get("data", {}).get("name") == "complete":
+                # Send a final closing event
+                final_event = {
+                    "type": "close",
+                    "data": {"message": "Stream complete", "timestamp": datetime.now().isoformat()}
+                }
+                yield f"event: close\ndata: {json.dumps(final_event)}\n\n"
+                break
+                
         except queue.Empty:
             # Send a keepalive comment every second if queue is empty
             yield ": keepalive\n\n"
