@@ -8,6 +8,8 @@ import statistics
 from pathlib import Path
 import textwrap
 import aiohttp
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
 from flare_ai_consensus.consensus import send_round
@@ -18,6 +20,10 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 from sample import sample_data
+
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 load_dotenv()
 
@@ -175,10 +181,44 @@ async def run_consensus_with_data(
         provider, consensus_config, response_data["initial_conversation"]
     )
     
-    aggregated_response = await async_centralized_llm_aggregator(
-        provider, consensus_config.aggregator_config, responses
-    )
-    print_colored("Initial aggregation complete", "blue")
+    try:
+        aggregated_response = await async_centralized_llm_aggregator(
+            provider, consensus_config.aggregator_config, responses
+        )
+        print_colored("Initial aggregation complete", "blue")
+    except IndexError:
+        # Handle the case where the aggregator fails to return a proper response
+        print_colored("Error in aggregation: Empty response from aggregator model", "red")
+        # Create a fallback aggregated response by combining the most common elements
+        prices = []
+        explanations = []
+        for model_id, response in responses.items():
+            price = extract_price_from_text(response)
+            if price is not None:
+                prices.append(price)
+            
+            # Try to extract explanation
+            try:
+                if isinstance(response, str) and response.strip().startswith("```json"):
+                    cleaned = re.sub(r'```json\s*|\s*```', '', response)
+                    data = json.loads(cleaned)
+                    if "explanation" in data:
+                        explanations.append(data["explanation"])
+            except:
+                pass
+        
+        # Calculate average price if any prices were found
+        avg_price = statistics.mean(prices) if prices else 0
+        
+        # Use the first explanation or a default one
+        explanation = explanations[0] if explanations else "Unable to generate explanation due to aggregation error."
+        
+        # Create a simple JSON response
+        aggregated_response = json.dumps({
+            "price": avg_price,
+            "explanation": explanation
+        })
+        print_colored(f"Created fallback aggregation with price: ${avg_price:.2f}", "yellow")
 
     response_data["iteration_0"] = responses
     response_data["aggregate_0"] = aggregated_response
@@ -190,10 +230,17 @@ async def run_consensus_with_data(
             provider, consensus_config, initial_conversation, aggregated_response
         )
         
-        aggregated_response = await async_centralized_llm_aggregator(
-            provider, consensus_config.aggregator_config, responses
-        )
-        print_colored(f"Improvement round {i+1} complete", "blue")
+        try:
+            aggregated_response = await async_centralized_llm_aggregator(
+                provider, consensus_config.aggregator_config, responses
+            )
+            print_colored(f"Improvement round {i+1} complete", "blue")
+        except IndexError:
+            # Handle aggregation failure in improvement rounds
+            print_colored(f"Error in improvement round {i+1} aggregation: Empty response from aggregator model", "red")
+            # Keep the previous aggregated response
+            print_colored("Using previous aggregation result", "yellow")
+            # No need to update aggregated_response as we're keeping the previous one
 
         response_data[f"iteration_{i + 1}"] = responses
         response_data[f"aggregate_{i + 1}"] = aggregated_response
@@ -521,14 +568,61 @@ async def process_nft_appraisal(contract_address: str, token_id: str):
         await provider.close()
 
 
-if __name__ == "__main__":
-    # Local development testing
-    import sys
-    if len(sys.argv) != 3:
-        print("Usage: python cloud_index.py <contract_address> <token_id>")
-        sys.exit(1)
+# Flask route for the API
+@app.route('/appraise', methods=['GET'])
+def appraise_nft_api():
+    """API endpoint to appraise an NFT"""
+    try:
+        # Get parameters from the request
+        contract_address = request.args.get('contract_address')
+        token_id = request.args.get('token_id')
+        
+        if not contract_address or not token_id:
+            return jsonify({
+                "error": "Missing contract_address or token_id parameter",
+                "price": 0,
+                "text": "Error: Missing required parameters",
+                "standard_deviation": 0,
+                "total_confidence": 0
+            }), 400
+        
+        # Run the async processing in a new event loop
+        result_json = asyncio.run(process_nft_appraisal(contract_address, token_id))
+        
+        # Parse the result back to a dictionary
+        result = json.loads(result_json)
+        
+        # Return the result
+        return jsonify(result)
     
-    contract_address = sys.argv[1]
-    token_id = sys.argv[2]
-    result = asyncio.run(process_nft_appraisal(contract_address, token_id))
-    print_colored("\nProgram completed.", "green")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e),
+            "price": 0,
+            "text": f"Error during consensus process: {str(e)}",
+            "standard_deviation": 0,
+            "total_confidence": 0
+        }), 500
+
+# Command-line interface
+if __name__ == "__main__":
+    import sys
+    
+    # Check if running in API mode or CLI mode
+    if len(sys.argv) > 1 and sys.argv[1] == "--api":
+        # Run as API server
+        port = int(sys.argv[2]) if len(sys.argv) > 2 else 8080
+        print_colored(f"Starting API server on port {port}...", "green")
+        app.run(host='0.0.0.0', port=port)
+    elif len(sys.argv) == 3:
+        # Run as CLI
+        contract_address = sys.argv[1]
+        token_id = sys.argv[2]
+        result = asyncio.run(process_nft_appraisal(contract_address, token_id))
+        print_colored("\nProgram completed.", "green")
+    else:
+        print("Usage:")
+        print("  python cloud_index.py <contract_address> <token_id>  # Run as CLI")
+        print("  python cloud_index.py --api [port]                  # Run as API server")
