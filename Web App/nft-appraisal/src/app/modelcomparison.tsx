@@ -25,8 +25,8 @@ type ModelId = (typeof AVAILABLE_MODELS)[number]["id"];
 export default function ModelComparison() {
   const [model1, setModel1] = useState<ModelId>("regression");
   const [model2, setModel2] = useState<ModelId>("confidence");
-  const [showAnimation1, setShowAnimation1] = useState(true);
-  const [showAnimation2, setShowAnimation2] = useState(true);
+  const [showAnimation1, setShowAnimation1] = useState(false);
+  const [showAnimation2, setShowAnimation2] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [consensusSteps, setConsensusSteps] = useState<ConsensusStep[]>(
     defaultConsensusSteps,
@@ -70,7 +70,7 @@ export default function ModelComparison() {
       return modelData.ethereum_price_usd.toFixed(decimals);
     }
 
-    // If the API only returns USD price (like confidence API), estimate ETH price
+    // If the API only returns USD price, estimate ETH price
     // Assuming current ETH price of ~$2,500 for conversion
     if (modelData.price !== undefined) {
       const estimatedEthPrice = modelData.price / 2500;
@@ -103,12 +103,28 @@ export default function ModelComparison() {
       return Math.round(modelData.final_confidence_score * 100);
     }
 
+    // Add support for the single LLM model format
+    if (modelData.confidence !== undefined) {
+      return Math.round(modelData.confidence * 100);
+    }
+
     return 0;
   };
 
   const getAccuracyPercentage = (modelData: any) => {
     if (!modelData || modelData.accuracy === undefined) return 0;
-    return Math.round(modelData.accuracy * 100);
+    
+    // Handle the case where accuracy is a number between 0 and 1
+    if (typeof modelData.accuracy === 'number') {
+      // If accuracy is already between 0-100, return as is
+      if (modelData.accuracy > 1) {
+        return Math.round(modelData.accuracy);
+      }
+      // Otherwise, convert from 0-1 to 0-100
+      return Math.round(modelData.accuracy * 100);
+    }
+    
+    return 0;
   };
 
   const getModelExplanation = (modelData: any) => {
@@ -163,15 +179,6 @@ export default function ModelComparison() {
       }
     }
   }, [nftData, model1, model2]);
-
-  // Add this useEffect to reset the cards to animation side when a new NFT is entered
-  useEffect(() => {
-    if (isAppraisalLoading) {
-      // When a new appraisal is loading, flip the cards to the animation side
-      setShowAnimation1(true);
-      setShowAnimation2(true);
-    }
-  }, [isAppraisalLoading]);
 
   // Loading skeleton component
   const LoadingSkeleton = () => (
@@ -363,14 +370,6 @@ export default function ModelComparison() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-full bg-blue-500/20 px-4 py-2 text-sm text-blue-400 transition-colors hover:bg-blue-500/30"
-                      onClick={() => setShowAnimation1(true)}
-                    >
-                      Show Animation
-                    </button>
-                  </div>
                 </div>
 
                 {/* Content section */}
@@ -473,14 +472,6 @@ export default function ModelComparison() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-full bg-blue-500/20 px-4 py-2 text-sm text-blue-400 transition-colors hover:bg-blue-500/30"
-                      onClick={() => setShowAnimation1(false)}
-                    >
-                      Back to Model Details
-                    </button>
-                  </div>
                 </div>
                 
                 <div className="flex flex-1 items-center justify-center">
@@ -522,14 +513,6 @@ export default function ModelComparison() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-full bg-purple-500/20 px-4 py-2 text-sm text-purple-400 transition-colors hover:bg-purple-500/30"
-                      onClick={() => setShowAnimation2(true)}
-                    >
-                      Show Animation
-                    </button>
-                  </div>
                 </div>
 
                 {/* Content section */}
@@ -544,7 +527,7 @@ export default function ModelComparison() {
                       </p>
                       <p className="text-3xl font-bold text-purple-400">
                         {model2Data
-                          ? `${getEthereumPrice(model2Data, 2)} ETH ($${getUsdPrice(model2Data, 2)})`
+                          ? `${getEthereumPrice(model2Data)} ETH ($${getUsdPrice(model2Data)})`
                           : "-.-- ETH"}
                       </p>
                     </div>
@@ -631,14 +614,6 @@ export default function ModelComparison() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-full bg-purple-500/20 px-4 py-2 text-sm text-purple-400 transition-colors hover:bg-purple-500/30"
-                      onClick={() => setShowAnimation2(false)}
-                    >
-                      Back to Model Details
-                    </button>
                   </div>
                 </div>
                 
