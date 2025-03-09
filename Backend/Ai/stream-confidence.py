@@ -9,8 +9,10 @@ import textwrap
 import time
 import structlog
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
+import queue
+import threading
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
 from flare_ai_consensus.settings import Settings, Message
@@ -26,6 +28,7 @@ from flare_ai_consensus.consensus.confidence.confidence_embeddings import (
 from sample import sample_data
 from dotenv import load_dotenv
 from Backend.Ai.Sideinfo_api.sideinfo import main as get_nft_data
+from Backend.Ai.cloud_confidence_index import run_confidence_consensus
 
 
 # Load environment variables
@@ -68,8 +71,21 @@ CHALLENGE_PROMPTS = [
     "What factors might you have missed out on? Please reconsider your valuation with these factors in mind."
 ]
 
+# Global event queue for streaming updates
+event_queue = queue.Queue()
+
+def send_event(event_type, data):
+    """Add an event to the queue for streaming"""
+    event_data = {
+        "type": event_type,
+        "data": data,
+        "timestamp": datetime.now().isoformat()
+    }
+    event_queue.put(event_data)
+    return event_data
+
 def print_colored(text, color=None):
-    """Print text with ANSI color codes"""
+    """Print text with ANSI color codes and send as stream event"""
     colors = {
         "red": "\033[91m",
         "green": "\033[92m",
@@ -84,39 +100,51 @@ def print_colored(text, color=None):
         print(f"{colors[color]}{text}{colors['reset']}")
     else:
         print(text)
-
+        
+    # Send as log event to the stream
+    send_event("log", {"message": text, "color": color})
 
 def format_and_print_responses(responses, title="Model Responses"):
-    """Format and print model responses nicely in the terminal"""
+    """Format and print model responses nicely in the terminal and send as stream event"""
     terminal_width = 80
     separator = "=" * terminal_width
     
-    print(f"\n{separator}")
-    print(f"{title.center(terminal_width)}")
-    print(f"{separator}\n")
+    print_colored(f"\n{separator}", "cyan")
+    print_colored(f"{title.center(terminal_width)}", "cyan")
+    print_colored(f"{separator}\n", "cyan")
+    
+    formatted_responses = {}
     
     for model_id, response in responses.items():
-        print(f"Model: {model_id}")
+        print_colored(f"Model: {model_id}", "yellow")
         
-        # Ensure response is a string
-        response_text = convert_to_string(response)
-        
-        # Extract price and explanation from response
-        price, explanation = properly_extract_json_price(response_text)
+        # Extract price and explanation
+        price, explanation = properly_extract_json_price(str(response))
         if price is not None:
-            print(f"Extracted price: ${price:.2f}")
+            print_colored(f"Extracted price: ${price:.2f}", "cyan")
+            formatted_responses[model_id] = {
+                "response": str(response),
+                "price": price,
+                "explanation": explanation
+            }
+        else:
+            formatted_responses[model_id] = {
+                "response": str(response),
+                "price": None,
+                "explanation": None
+            }
         
         # Format and wrap the response text
-        try:
-            wrapped_text = textwrap.fill(response_text, width=terminal_width-4)
-            indented_text = textwrap.indent(wrapped_text, "  ")
-            print(indented_text)
-        except Exception as e:
-            print(f"  Error formatting response: {e}")
-            print(f"  Raw response: {response_text[:500]}...")
-            
-        print(f"{'-' * terminal_width}")
-
+        wrapped_text = textwrap.fill(str(response), width=terminal_width-4)
+        indented_text = textwrap.indent(wrapped_text, "  ")
+        print(indented_text)
+        print_colored(f"{'-' * terminal_width}", "blue")
+    
+    # Send detailed model responses as a stream event
+    send_event("model_responses", {
+        "title": title,
+        "responses": formatted_responses
+    })
 
 def convert_to_string(obj):
     """Safely convert any object to a string"""
@@ -626,216 +654,83 @@ Do not include any text outside the JSON structure or any markdown code blocks.
     
     return aggregated_text
 
-
-async def run_confidence_consensus(contract_address, token_id, date_to_predict=None, actual_value=None):
-    """Run the confidence consensus process for a given NFT data"""
-    import random
+def generate_sse_events():
+    """Generate Server-Sent Events for streaming"""
+    # Send initial connection event
+    yield f"event: connect\ndata: {json.dumps({'connected': True, 'timestamp': datetime.now().isoformat()})}\n\n"
     
-    # Get NFT data from sideinfo API
-    nft_data = get_nft_data(contract_address, token_id)
-    
-    # Load API key from environment variable
-    api_key = os.environ.get("OPEN_ROUTER_API_KEY", "")
-    if not api_key:
-        print_colored("Error: OPEN_ROUTER_API_KEY environment variable not set.", "red")
-        print("Please set your OpenRouter API key in your .env file")
-        return {"error": "API key not set"}
-
-    # Initialize the settings
-    settings = Settings()
-    
-    # Create paths for configuration and data
-    config_path = Path("config")
-    config_path.mkdir(exist_ok=True)
-    
-    # Load or create the consensus configuration
-    config_file = config_path / "consensus_config.json"
-           
-    # Load the configuration
-    config_json = load_json(config_file)
-    settings.load_consensus_config(config_json)
-    
-    # Create the OpenRouter provider
-    provider = AsyncOpenRouterProvider(
-        api_key=api_key,
-        base_url=settings.open_router_base_url
-    )
-    
-    # Patch the provider for better logging
-    provider = await patch_provider_for_logging(provider)
-    
-    # Use the most recent date from sales history if date_to_predict is not provided
-    if not date_to_predict and nft_data.get("sales_history"):
-        most_recent_date = nft_data["sales_history"][0]["date"]
-        date_to_predict = datetime.strptime(most_recent_date, "%Y-%m-%d %H:%M:%S").strftime("%B, %Y")
-    
-    # Define the NFT appraisal conversation
-    content_prompt = """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this specific date, which is $$$$$$. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST be in JSON format starting with a single value of price in USD, followed by a detailed explanation of your reasoning.
-
-            The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means. Your analysis and appraisal should be more nuanced, smart, and data-driven than the example. 
+    # Continue sending events from the queue
+    while True:
+        try:
+            # Try to get an event from the queue with a timeout
+            event = event_queue.get(timeout=1)
+            event_type = event["type"]
+            event_data = json.dumps(event)
             
-            Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers
-
-            In the JSON, the price of Ethereum (price_ethereum) was how much Ethereum was paid at the time and the price in USD (price_usd) is the price of that Ethereum at the time of the sale in USD. 
-
-            Example Input:
-            {
-                "name": "Art Blocks",
-                "token_id": "78000956",
-                "token_address": "0xa7d8d9ef8d8ce8992df33d8b8cf4aebabd5bd270",
-                "metadata": {
-                    "symbol": "BLOCKS",
-                    "rarity_rank": "None",
-                    "rarity_percentage": "None",
-                    "amount": "1"
-                },
-                "sales_history": [
-                    {
-                        "price_ethereum": 24.61,
-                        "price_usd": 61914.7812,
-                        "date": "2025-03-03 17:49:35"
-                    },
-                    {
-                        "price_ethereum": 85.0,
-                        "price_usd": 108403.25579,
-                        "date": "2022-12-13 19:04:11"
-                    },
-                    {
-                        "price_ethereum": 0.17,
-                        "price_usd": 422.72201,
-                        "date": "2021-06-11 09:21:07"
-                    }
-                ]
-            }
-
-            Example Output:
-            {
-                "price": 67240,
-                "explanation": "Based on the sales history, the price of the NFT has been increasing over time. The most recent sale was for 24.61 ETH, which is worth $61914.7812 at the time of the sale. The previous sale was for 85 ETH, which is worth $108403.25579 at the time of the sale. The first sale was for 0.17 ETH, which is worth $422.72201 at the time of the sale. Based on this data, I estimate that the price of the NFT is currently $67240. Additional context on the rarity would help improve the response and the price estimate, however, with the given data, this seems a reasonable estimate for this date."
-            }
+            # Format as SSE
+            yield f"event: {event_type}\ndata: {event_data}\n\n"
             
-            """
-    
-    nft_appraisal_conversation = [
-        {
-            "role": "system",
-            "content": content_prompt.replace("$$$$$$", date_to_predict or "the current date", 1)
-        },
-        {
-            "role": "user",
-            "content": f"Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Here is the sample data: {nft_data}."
-        }
-    ]
-    
-    print_colored("\nSending NFT appraisal request to multiple models...", "magenta")
-    print_colored("Using sample data for NFT appraisal", "cyan")
-    
-    # Display configuration summary
-    for model in settings.consensus_config.models:
-        print_colored(f"Model: {model.model_id} (max_tokens: {model.max_tokens})", "yellow")
-    
-    aggregator_model = settings.consensus_config.aggregator_config.model
-    print_colored(f"Aggregator: {aggregator_model.model_id} (max_tokens: {aggregator_model.max_tokens})", "yellow")
-    
-    try:
-        # Step 1: Get initial model responses
-        print_colored("\nGetting initial model responses...", "magenta")
-        logger.info("Starting initial model response collection")
-        initial_responses = await send_initial_round(
-            provider=provider,
-            consensus_config=settings.consensus_config,
-            initial_conversation=nft_appraisal_conversation
-        )
-        
-        # Display individual responses
-        format_and_print_responses(initial_responses, "<INITIAL MODEL RESPONSES>")
-        logger.info("Initial responses collected", model_count=len(initial_responses))
-        
-        # Step 2: Select a challenge prompt
-        challenge_prompt = random.choice(CHALLENGE_PROMPTS)
-        print_colored(f"\nSelected challenge prompt: '{challenge_prompt}'", "blue")
-        
-        # Step 3: Send challenge to all models, including their original responses
-        print_colored("\nSending challenge prompt to all models...", "magenta")
-        challenge_responses = await send_challenge_round(
-            provider=provider,
-            consensus_config=settings.consensus_config,
-            initial_conversation=nft_appraisal_conversation,
-            challenge_prompt=challenge_prompt,
-            initial_responses=initial_responses
-        )
-        
-        # Display challenge responses
-        format_and_print_responses(challenge_responses, "<CHALLENGE RESPONSES>")
-        
-        # Step 4: Analyze how models respond to the challenge
-        print_colored("\nAnalyzing model responses to challenge...", "magenta")
-        analysis = await analyze_model_responses(initial_responses, challenge_responses)
-        
-        # Step 5: Perform weighted aggregation
-        print_colored("\nPerforming weighted aggregation...", "magenta")
-        final_consensus = await weighted_aggregation(
-            provider=provider,
-            aggregator_config=settings.consensus_config.aggregator_config,
-            model_responses=challenge_responses,
-            analysis=analysis
-        )
-        
-        # Display the final consensus result
-        print_colored("\n" + "=" * 80, "green")
-        print_colored("FINAL CONSENSUS RESULT".center(80), "green")
-        print_colored("=" * 80 + "\n", "green")
-        
-        print(final_consensus)
-        
-        print_colored("\n" + "=" * 80, "green")
-        
-        # Save the results to a file
-        results_dir = Path("results")
-        results_dir.mkdir(exist_ok=True)
-        
-        # Save the JSON result
-        results_file = results_dir / "confident_consensus_result.json"
-        with open(results_file, "w") as f:
-            f.write(final_consensus)
-        
-        print_colored(f"\nSaved consensus result to {results_file}", "green")
-        
-        
-    except Exception as e:
-        print_colored(f"Error during consensus process: {e}", "red")
-        import traceback
-        traceback.print_exc()
-    finally:
-        # Close the provider's HTTP client
-        await provider.close()
+            # If this is a final consensus event, close the connection
+            if event_type == "final_consensus":
+                # Send a final closing event
+                final_event = {
+                    "type": "close",
+                    "data": {"message": "Stream complete", "timestamp": datetime.now().isoformat()}
+                }
+                yield f"event: close\ndata: {json.dumps(final_event)}\n\n"
+                break
+                
+        except queue.Empty:
+            # Send a keepalive comment every second if queue is empty
+            yield ": keepalive\n\n"
+        except Exception as e:
+            # If any error occurs, send it as an event and continue
+            error_data = json.dumps({"type": "error", "message": str(e)})
+            yield f"event: error\ndata: {error_data}\n\n"
 
-    # Return the final consensus result as JSON
-    try:
-        return json.loads(final_consensus)
-    except:
-        return {"error": "Failed to parse final consensus result"}
-
-# Add Flask route to handle API requests
-@app.route('/confidence_appraise', methods=['GET'])
-def nft_appraisal():
+# Update the Flask routes to include streaming endpoint
+@app.route('/confidence_appraise/stream', methods=['GET'])
+def appraise_nft_stream_api():
+    """Streaming API endpoint to appraise an NFT with real-time updates using confidence consensus"""
+    # Clear the event queue for a fresh start
+    while not event_queue.empty():
+        event_queue.get()
+    
+    # Get parameters from the request
     contract_address = request.args.get('contract_address')
     token_id = request.args.get('token_id')
     date_to_predict = request.args.get('date')
     
     if not contract_address or not token_id:
-        return jsonify({"error": "Missing contract_address or token_id parameters"}), 400
+        # Send error event and return error response
+        error_msg = "Missing contract_address or token_id parameter"
+        send_event("error", {"message": error_msg})
+        return jsonify({
+            "error": error_msg,
+            "price": 0,
+            "text": "Error: Missing required parameters",
+            "standard_deviation": 0,
+            "total_confidence": 0
+        }), 400
     
-    try:
-        # Run the consensus process asynchronously
-        result = asyncio.run(run_confidence_consensus(
-            contract_address=contract_address,
-            token_id=token_id,
-            date_to_predict=date_to_predict
-        ))
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # Start the processing in a background thread
+    def run_processing():
+        asyncio.run(run_confidence_consensus(contract_address, token_id, date_to_predict))
+    
+    processing_thread = threading.Thread(target=run_processing)
+    processing_thread.daemon = True
+    processing_thread.start()
+    
+    # Return streaming response
+    return Response(
+        stream_with_context(generate_sse_events()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',  # Disable nginx buffering
+            'Connection': 'keep-alive'
+        }
+    )
 
 # Update the main function to run the Flask app
 def main():
