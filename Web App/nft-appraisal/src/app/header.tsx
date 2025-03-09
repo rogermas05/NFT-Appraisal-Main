@@ -54,7 +54,7 @@ export default function Header() {
       );
       
       const appraisalPromise = fetch(
-        `http://35.193.174.113:8080/appraise?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
+        `http://35.193.174.113:8080/centralized_appraise?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
       );
 
       // Handle NFT data first
