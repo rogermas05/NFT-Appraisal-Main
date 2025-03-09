@@ -393,6 +393,9 @@ async def process_nft_appraisal(contract_address: str, token_id: str):
             "ethereum_price_usd": price / eth_price if eth_price > 0 else 0
         }
         
+        final_output["actual_value"] = ACTUAL_VALUE
+        
+        
         print(f"Accuracy: {accuracy}")
         print(f"Actual Value: {ACTUAL_VALUE}")
         print(f"Predicted Value: {price}")

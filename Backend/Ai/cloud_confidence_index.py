@@ -405,6 +405,7 @@ async def analyze_model_responses(initial_responses, challenge_responses):
             "confidence_score": confidence_score
         }
         
+        
         # Log results
         print_colored(f"\nModel: {model_id}", "yellow")
         print_colored(f"Initial price: ${initial_price:.2f}", "cyan")
@@ -598,6 +599,9 @@ Do not include any text outside the JSON structure or any markdown code blocks.
         
             result_json["final_confidence_score"] = final_confidence
             result_json["weights_standard_deviation"] = weights_std_dev
+            
+        result_json["actual_value"] = ACTUAL_VALUE
+        
             
         # Convert back to JSON string
         aggregated_text = json.dumps(result_json, indent=2)
