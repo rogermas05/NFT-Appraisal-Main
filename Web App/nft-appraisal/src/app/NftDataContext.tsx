@@ -23,6 +23,8 @@ interface NFTDataContextType {
   setIsLoading: (loading: boolean) => void;
   isAppraisalLoading: boolean;
   setIsAppraisalLoading: (loading: boolean) => void;
+  selectedModels: string[];
+  setSelectedModels: (models: string[]) => void;
 }
 
 const NFTDataContext = createContext<NFTDataContextType | undefined>(undefined);
@@ -31,6 +33,7 @@ export function NFTDataProvider({ children }: { children: ReactNode }) {
   const [nftData, setNftData] = useState<NFTData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isAppraisalLoading, setIsAppraisalLoading] = useState(false);
+  const [selectedModels, setSelectedModels] = useState<string[]>(["regression", "confidence"]);
 
   return (
     <NFTDataContext.Provider value={{ 
@@ -39,7 +42,9 @@ export function NFTDataProvider({ children }: { children: ReactNode }) {
       isLoading, 
       setIsLoading,
       isAppraisalLoading,
-      setIsAppraisalLoading
+      setIsAppraisalLoading,
+      selectedModels,
+      setSelectedModels
     }}>
       {children}
     </NFTDataContext.Provider>
