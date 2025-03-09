@@ -576,7 +576,7 @@ async def process_nft_appraisal(contract_address: str, token_id: str):
 
 
 # Flask route for the API
-@app.route('/appraise', methods=['GET'])
+@app.route('/centralized_appraise', methods=['GET'])
 def appraise_nft_api():
     """API endpoint to appraise an NFT"""
     try:

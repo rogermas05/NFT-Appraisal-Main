@@ -817,7 +817,7 @@ async def run_confidence_consensus(contract_address, token_id, date_to_predict=N
         return {"error": "Failed to parse final consensus result"}
 
 # Add Flask route to handle API requests
-@app.route('/nft_appraisal', methods=['GET'])
+@app.route('/nft_confidence', methods=['GET'])
 def nft_appraisal():
     contract_address = request.args.get('contract_address')
     token_id = request.args.get('token_id')
