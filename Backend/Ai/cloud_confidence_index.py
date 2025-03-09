@@ -839,7 +839,7 @@ def nft_appraisal():
 # Update the main function to run the Flask app
 def main():
     # Set the port from environment variable or use default
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 8082))
     app.run(debug=True, host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
