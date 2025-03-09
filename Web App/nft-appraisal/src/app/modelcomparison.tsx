@@ -160,6 +160,10 @@ export default function ModelComparison() {
     return baseText;
   };
 
+  // Get contract address and token ID from nftData
+  const contractAddress = nftData?.contractAddress;
+  const tokenId = nftData?.tokenId;
+
   return (
     <div className="flex-1 flex flex-col gap-6 p-6">
       {/* Error message toast */}
@@ -282,7 +286,10 @@ export default function ModelComparison() {
             </div>
           ) : (
             <div className="h-full bg-gray-800/30 rounded-xl p-6 flex items-center justify-center">
-              {animationContent}
+              <NetworkAnimation 
+                contractAddress={contractAddress}
+                tokenId={tokenId}
+              />
             </div>
           )}
         </div>
@@ -399,7 +406,10 @@ export default function ModelComparison() {
             </div>
           ) : (
             <div className="h-full bg-gray-800/30 rounded-xl p-6 flex items-center justify-center">
-              {animationContent}
+              <NetworkAnimation 
+                contractAddress={contractAddress}
+                tokenId={tokenId}
+              />
             </div>
           )}
         </div>
