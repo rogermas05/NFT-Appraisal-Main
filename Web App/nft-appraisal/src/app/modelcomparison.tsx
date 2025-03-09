@@ -254,7 +254,8 @@ export default function ModelComparison() {
                   </div>
                 </div>
 
-                {model1 === "regression" && isAppraisalLoading ? (
+                {/* Content section - Now show loading for any model when loading is active */}
+                {isAppraisalLoading ? (
                   <LoadingSkeleton />
                 ) : (
                   <>
@@ -364,7 +365,8 @@ export default function ModelComparison() {
                   </div>
                 </div>
 
-                {model2 === "regression" && isAppraisalLoading ? (
+                {/* Content section - Now show loading for any model when loading is active */}
+                {isAppraisalLoading ? (
                   <LoadingSkeleton />
                 ) : (
                   <>
