@@ -8,6 +8,7 @@ from pathlib import Path
 import textwrap
 import time
 import structlog
+from datetime import datetime
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
 from flare_ai_consensus.settings import Settings, Message
@@ -26,6 +27,21 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+
+ACCURACY_METRIC_DESIRED = True
+
+# Parse data to compare accuracy
+def accuracy_preparation(json_data):
+    if json_data["sales_history"]:
+        most_recent_transaction = json_data["sales_history"].pop(0)  # Removes and stores the first (latest) entry
+        formatted_date = datetime.strptime(most_recent_transaction["date"], "%Y-%m-%d %H:%M:%S").strftime("%B, %Y")
+    
+    return most_recent_transaction["price_usd"], formatted_date, json_data
+
+if ACCURACY_METRIC_DESIRED:
+    ACTUAL_VALUE, DATE_TO_PREDICT, sample_data = accuracy_preparation(sample_data)
+
+
 # Configure structlog for better formatting
 structlog.configure(
     processors=[
@@ -38,9 +54,7 @@ logger = structlog.get_logger()
 
 # Improved challenge prompts that encourage refinement rather than radical changes
 CHALLENGE_PROMPTS = [
-    "Based on your analysis, evaluate whether you need to refine your price estimate? Consider a variety of market scenarios and use the data to identify what price estimate is most appropriate.",
-    
-    "Do you want to revisit your price estimate, taking into account the NFT's rarity rank and recent sales patterns? A slightly more detailed analysis would be helpful.",
+    "Based on your analysis, evaluate whether you need to refine your price estimate. Consider a variety of market scenarios and use the data to identify what price estimate is most appropriate.",
     
     "Your price estimate might be unreasonable, could you provide a more nuanced analysis to support your estimate? Alternatively, you may wish to change your estimate.",
     
@@ -355,11 +369,11 @@ async def analyze_model_responses(initial_responses, challenge_responses):
         elif initial_price == 0:
             price_change = 0.8  # Cap at 80% for maximum change
         else:
-            # Calculate relative price change with softening function
-            relative_change = abs(challenge_price - initial_price) / max(initial_price, 1)
-            # Apply a square root transformation to reduce impact of large changes
-            # Cap at 95% to prevent absolute penalties
-            price_change = min(0.95, math.sqrt(min(1, relative_change)))
+            # Calculate relative price change
+            price_change = min(abs(challenge_price - initial_price) / initial_price, 1)
+            
+            
+     
             
         # Calculate price stability (inverse of price change)
         price_stability = 1 - price_change
@@ -389,7 +403,7 @@ async def analyze_model_responses(initial_responses, challenge_responses):
         print_colored(f"Initial price: ${initial_price:.2f}", "cyan")
         print_colored(f"Challenge price: ${challenge_price:.2f}", "cyan")
         print_colored(f"Raw change: {abs(challenge_price - initial_price) / max(initial_price, 1):.2%}", "cyan")
-        print_colored(f"Softened price change: {price_change:.2%}", "magenta")
+        print_colored(f"Price change: {price_change:.2%}", "magenta")
         print_colored(f"Price stability: {price_stability:.4f}", "magenta")
         print_colored(f"Text similarity: {text_similarity:.4f}", "magenta")
         print_colored(f"Formula: 0.3 * {text_similarity:.4f} + 0.7 * {price_stability:.4f} = {confidence_score:.4f}", "blue")
@@ -397,23 +411,6 @@ async def analyze_model_responses(initial_responses, challenge_responses):
         
     return analysis
 
-
-def calculate_confidence(std_dev, weights):
-    """Calculate a confidence score based on standard deviation relative to mean"""
-    if not weights or len(weights) < 2:
-        return 0.5  # Default confidence with insufficient data
-    
-    mean_price = statistics.mean(weights)
-    if mean_price == 0:
-        return 0.5  # Avoid division by zero
-    
-    # Calculate coefficient of variation (normalized standard deviation)
-    cv = std_dev / mean_price
-    
-    # Convert to confidence score (1 - normalized CV, bounded between 0.1 and 0.9)
-    # Lower CV means higher confidence
-    confidence = 1.0 - min(cv, 1.0)
-    return max(0.1, min(0.9, confidence))
 
 async def weighted_aggregation(provider, aggregator_config, model_responses, analysis):
     """
@@ -462,20 +459,6 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
         median_price = 0
         std_dev = 0
         
-    # Calculate the standard deviation of the weights, and the total confidence score derived from this
-    weight_values = list(weights.values())
-    if weight_values:
-        weight_mean = statistics.mean(weight_values)
-        weight_std_dev = statistics.stdev(weight_values) if len(weight_values) > 1 else 0
-        total_confidence = calculate_confidence(weight_std_dev, weight_values)
-    else:   
-        weight_mean = 0
-        weight_std_dev = 0
-        total_confidence = 0
-        
-    print_colored(f"Weight mean: {weight_mean:.4f}", "blue")
-    print_colored(f"Weight standard deviation: {weight_std_dev:.4f}", "blue")
-    print_colored(f"Total confidence: {total_confidence:.4f}", "blue")
     
     # Log the normalized weights and prices
     print_colored("\nModel Weights and Prices:", "cyan")
@@ -579,6 +562,16 @@ Do not include any text outside the JSON structure or any markdown code blocks.
         result_json["standard_deviation"] = std_dev
         result_json["models"] = {}
         
+        predicted_price = result_json["price"]
+        error_accuracy = abs((ACTUAL_VALUE - predicted_price)) / ACTUAL_VALUE
+        accuracy = 1 - error_accuracy
+        
+        print_colored(f"Predicted Price: ${predicted_price:.2f}", "green")
+        print_colored(f"Actual Price: ${ACTUAL_VALUE:.2f}", "green")
+        print_colored(f"Accuracy: {accuracy:.2%}", "green")
+        
+        result_json["accuracy"] = accuracy
+        
         for model_id, data in analysis.items():
             result_json["models"][model_id] = {
                 "text_similarity": data["text_similarity"],
@@ -586,8 +579,22 @@ Do not include any text outside the JSON structure or any markdown code blocks.
                 "weight": weights[model_id]
             }
             
+        # Add Final Confidence score and Standard Deviation of Weights
+        weights = [weights.get(model_id, 0) for model_id in analysis]
+        print("WEIGHTS: ", weights)
+        
+        if weights and len(weights) > 1:
+            weights_std_dev = statistics.stdev(weights)
+            cv = weights_std_dev / (sum(weights) / len(weights) )
+            confidence = 1.0 - min(cv, 1.0)
+            final_confidence = max(0.1, min(0.9, confidence))
+        
+            result_json["final_confidence_score"] = final_confidence
+            result_json["weights_standard_deviation"] = weights_std_dev
+            
         # Convert back to JSON string
         aggregated_text = json.dumps(result_json, indent=2)
+        
     except json.JSONDecodeError as e:
         print_colored(f"Error parsing aggregator response as JSON: {e}", "red")
         print_colored("Creating fallback JSON output", "yellow")
@@ -646,11 +653,9 @@ async def main():
     # Patch the provider for better logging
     provider = await patch_provider_for_logging(provider)
     
+    
     # Define the NFT appraisal conversation
-    nft_appraisal_conversation = [
-        {
-            "role": "system",
-            "content": """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this specific date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST be in JSON format starting with a single value of price in USD, followed by a detailed explanation of your reasoning.
+    content_prompt = """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this specific date, which is $$$$$$. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST be in JSON format starting with a single value of price in USD, followed by a detailed explanation of your reasoning.
 
             The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means. Your analysis and appraisal should be more nuanced, smart, and data-driven than the example. 
             
@@ -695,6 +700,11 @@ async def main():
             }
             
             """
+    
+    nft_appraisal_conversation = [
+        {
+            "role": "system",
+            "content": content_prompt.replace("$$$$$$", DATE_TO_PREDICT, 1)
             },
         {
             "role": "user",
@@ -775,6 +785,7 @@ async def main():
             f.write(final_consensus)
         
         print_colored(f"\nSaved consensus result to {results_file}", "green")
+        
         
     except Exception as e:
         print_colored(f"Error during consensus process: {e}", "red")
