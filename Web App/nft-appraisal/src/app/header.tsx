@@ -18,7 +18,7 @@ export default function Header() {
   const [nftLink, setNftLink] = useState("")
   const [contractAddress, setContractAddress] = useState("")
   const [tokenId, setTokenId] = useState("")
-  const { setNftData, setIsLoading } = useNFTData()
+  const { setNftData, setIsLoading, setIsAppraisalLoading } = useNFTData()
 
   const clearInputs = () => {
     setNftLink("")
@@ -29,6 +29,7 @@ export default function Header() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setIsAppraisalLoading(true)
     
     try {
       let finalContractAddress = contractAddress
@@ -47,19 +48,27 @@ export default function Header() {
         }
       }
 
-      const response = await fetch(
+      // Start both API requests in parallel
+      const nftDataPromise = fetch(
         `https://get-nft-data-dkwdhhyv7q-uc.a.run.app/?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
-      )
+      );
+      
+      const appraisalPromise = fetch(
+        `https://us-central1-nft-appraisal.cloudfunctions.net/appraise_nft?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
+      );
 
+      // Handle NFT data first
+      const response = await nftDataPromise;
       if (!response.ok) {
-        throw new Error('Failed to fetch NFT data')
+        throw new Error('Failed to fetch NFT data');
       }
 
-      const data = await response.json()
+      const data = await response.json();
       const lastSale = data.sales_history && data.sales_history.length > 0 
         ? data.sales_history[0] 
-        : null
+        : null;
 
+      // Update NFT data immediately
       setNftData({
         collectionName: data.name || '-',
         collectionAddress: data.token_address || '-',
@@ -68,13 +77,42 @@ export default function Header() {
         lastSalePrice: lastSale 
           ? `${lastSale.price_ethereum} ETH ($${lastSale.price_usd.toFixed(2)})` 
           : '-',
-        imageUrl: data.image ? convertIpfsUrl(data.image) : undefined
-      })
+        imageUrl: data.image ? convertIpfsUrl(data.image) : undefined,
+        appraisalData: undefined // Initially undefined
+      });
+
+      // Set loading to false after NFT data is loaded
+      setIsLoading(false);
+
+      // Then handle appraisal data when it completes
+      try {
+        const appraisalResponse = await appraisalPromise;
+        if (appraisalResponse.ok) {
+          const appraisalData = await appraisalResponse.json();
+          
+          // Update only the appraisal data, preserving the rest of the NFT data
+          setNftData(prevData => {
+            if (prevData) {
+              return {
+                ...prevData,
+                appraisalData: appraisalData
+              };
+            }
+            return prevData;
+          });
+        }
+      } catch (appraisalError) {
+        console.error('Error fetching appraisal data:', appraisalError);
+        // This error doesn't affect the main NFT data display
+      } finally {
+        setIsAppraisalLoading(false);
+      }
+      
     } catch (error) {
-      console.error('Error fetching NFT data:', error)
-      setNftData(null)
-    } finally {
-      setIsLoading(false)
+      console.error('Error fetching NFT data:', error);
+      setNftData(null);
+      setIsLoading(false);
+      setIsAppraisalLoading(false);
     }
   }
 

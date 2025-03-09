@@ -1,4 +1,4 @@
-from metadata import generate_metadata, parse_nft_data, get_nft_sales_history
+from Backend.AI.functions.metadata import generate_metadata, parse_nft_data, get_nft_sales_history
 from firebase_functions import https_fn, options
 from firebase_admin import initialize_app
 from moralis import evm_api
