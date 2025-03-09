@@ -37,16 +37,19 @@ CORS(app)
 
 ACCURACY_METRIC_DESIRED = True
 
+# Global variables for NFT data
+NFT_DATA = None
+ACTUAL_VALUE = None
+DATE_TO_PREDICT = None
+
 # Parse data to compare accuracy
 def accuracy_preparation(json_data):
+    global ACTUAL_VALUE, DATE_TO_PREDICT, NFT_DATA
     if json_data["sales_history"]:
         most_recent_transaction = json_data["sales_history"].pop(0)  # Removes and stores the first (latest) entry
         formatted_date = datetime.strptime(most_recent_transaction["date"], "%Y-%m-%d %H:%M:%S").strftime("%B, %Y")
     
     return most_recent_transaction["price_usd"], formatted_date, json_data
-
-if ACCURACY_METRIC_DESIRED:
-    ACTUAL_VALUE, DATE_TO_PREDICT, sample_data = accuracy_preparation(sample_data)
 
 
 # Configure structlog for better formatting
@@ -425,6 +428,7 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
     Provide aggregator model with confidence scores and let it determine the final price.
     We don't calculate a weighted average ourselves, but instead pass the weights to the model.
     """
+    global ACTUAL_VALUE
     # Calculate weights based on confidence scores
     confidence_scores = {model_id: data["confidence_score"] for model_id, data in analysis.items()}
     
@@ -636,8 +640,10 @@ async def run_confidence_consensus(contract_address, token_id, date_to_predict=N
     """Run the confidence consensus process for a given NFT data"""
     import random
     
-    # Get NFT data from sideinfo API
-    nft_data = get_nft_data(contract_address, token_id)
+    # Get NFT data from sideinfo API and set global variables
+    global NFT_DATA, ACTUAL_VALUE, DATE_TO_PREDICT
+    NFT_DATA = get_nft_data(contract_address, token_id)
+    ACTUAL_VALUE, DATE_TO_PREDICT, NFT_DATA = accuracy_preparation(NFT_DATA)
     
     # Load API key from environment variable
     api_key = os.environ.get("OPEN_ROUTER_API_KEY", "")
@@ -670,8 +676,8 @@ async def run_confidence_consensus(contract_address, token_id, date_to_predict=N
     provider = await patch_provider_for_logging(provider)
     
     # Use the most recent date from sales history if date_to_predict is not provided
-    if not date_to_predict and nft_data.get("sales_history"):
-        most_recent_date = nft_data["sales_history"][0]["date"]
+    if not date_to_predict and NFT_DATA.get("sales_history"):
+        most_recent_date = NFT_DATA["sales_history"][0]["date"]
         date_to_predict = datetime.strptime(most_recent_date, "%Y-%m-%d %H:%M:%S").strftime("%B, %Y")
     
     # Define the NFT appraisal conversation
@@ -728,7 +734,7 @@ async def run_confidence_consensus(contract_address, token_id, date_to_predict=N
         },
         {
             "role": "user",
-            "content": f"Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Here is the sample data: {nft_data}."
+            "content": f"Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Here is the sample data: {NFT_DATA}."
         }
     ]
     
@@ -826,7 +832,6 @@ async def run_confidence_consensus(contract_address, token_id, date_to_predict=N
 def nft_appraisal():
     contract_address = request.args.get('contract_address')
     token_id = request.args.get('token_id')
-    date_to_predict = request.args.get('date')
     
     if not contract_address or not token_id:
         return jsonify({"error": "Missing contract_address or token_id parameters"}), 400
@@ -836,7 +841,6 @@ def nft_appraisal():
         result = asyncio.run(run_confidence_consensus(
             contract_address=contract_address,
             token_id=token_id,
-            date_to_predict=date_to_predict
         ))
         return jsonify(result)
     except Exception as e:
