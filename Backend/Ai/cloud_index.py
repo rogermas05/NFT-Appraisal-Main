@@ -12,12 +12,26 @@ from flare_ai_consensus.router import AsyncOpenRouterProvider
 from flare_ai_consensus.consensus import run_consensus, send_round
 from flare_ai_consensus.settings import Settings, Message
 from flare_ai_consensus.utils import load_json, parse_chat_response
+from datetime import datetime
 
 from sample import sample_data
 from dotenv import load_dotenv
 
 
 load_dotenv()
+
+ACCURACY_METRIC_DESIRED = True
+
+# Parse data to compare accuracy
+def accuracy_preparation(json_data):
+    if json_data["sales_history"]:
+        most_recent_transaction = json_data["sales_history"].pop(0)  # Removes and stores the first (latest) entry
+        formatted_date = datetime.strptime(most_recent_transaction["date"], "%Y-%m-%d %H:%M:%S").strftime("%B, %Y")
+    
+    return most_recent_transaction["price_usd"], formatted_date, json_data
+
+if ACCURACY_METRIC_DESIRED:
+    ACTUAL_VALUE, DATE_TO_PREDICT, sample_data = accuracy_preparation(sample_data)
 
 
 def print_colored(text, color=None):
@@ -192,61 +206,7 @@ async def main():
     
     # Load or create the consensus configuration
     config_file = config_path / "consensus_config.json"
-    
-    appraisal_date = "March, 2025"
-        
-    # if not config_file.exists():
-    if True:
-        default_config = {
-            "models": [
-                {
-                    "id": "meta-llama/llama-3.2-3b-instruct:free",
-                    "max_tokens": 3500,
-                    "temperature": 0.7
-                },
-                {
-                    "id": "liquid/lfm-3b",
-                    "max_tokens": 3500,
-                    "temperature": 0.7
-                },
-                {
-                    "id": "google/gemini-2.0-flash-001",
-                    "max_tokens": 3500,
-                    "temperature": 0.7
-                }
-                
-            ],
-            "aggregator": [
-                {
-                    "model": {
-                        "id": "google/gemini-flash-1.5-8b-exp",
-                        "max_tokens": 3500,
-                        "temperature": 0.65
-                    },
-                    "aggregator_context": [
-                        {
-                            "role": "system",
-                            "content": "Your role is to objectively evaluate responses from multiple large-language models and combine them into a single coherent response. Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Focus on accuracy and completeness in your synthesis."
-                        }
-                    ],
-                    "aggregator_prompt": [
-                        {
-                            "role": "user",
-                            "content": """You have been provided with responses from various models to the latest query. Synthesize these responses into a single, high-quality answer. If the models disagree on any point, note this and explain the different perspectives. Your response should be well-structured, comprehensive, and accurate. Your response should be in JSON format like the models, and start with a SINGLE VALUE USD prediction of the NFT Price. Then there will be an explanation component where you will conduct your thorough discussion. Ensure that you are following the JSON format.
-                            """
-                        }
-                    ]
-                }
-            ],
-            "aggregated_prompt_type": "system",
-            "improvement_prompt": "Please provide an improved answer based on the consensus responses. Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers",
-            "iterations": 1
-        }
-        
-        with open(config_file, "w") as f:
-            json.dump(default_config, f, indent=4)
-        
-        print_colored(f"Created default configuration file at {config_file}", "green")
+
     
     # Load the configuration
     config_json = load_json(config_file)
@@ -261,11 +221,7 @@ async def main():
     # Patch the provider for better logging
     provider = await patch_provider_for_logging(provider)
     
-    # Define the NFT appraisal conversation
-    nft_appraisal_conversation = [
-        {
-            "role": "system",
-            "content": """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this specific date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST be in JSON format starting with a single value of price in USD, followed by a detailed explanation of your reasoning.
+    content_prompt = """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this specific date, which is $$$$$$. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST be in JSON format starting with a single value of price in USD, followed by a detailed explanation of your reasoning.
 
             The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means. Your analysis and appraisal should be more nuanced, smart, and data-driven than the example. 
             
@@ -310,6 +266,12 @@ async def main():
             }
             
             """
+    
+    # Define the NFT appraisal conversation
+    nft_appraisal_conversation = [
+        {
+            "role": "system",
+            "content": content_prompt.replace("$$$$$$", DATE_TO_PREDICT, 1)
             },
         {
             "role": "user",
@@ -460,6 +422,13 @@ async def main():
             "standard_deviation": final_std_dev,
             "total_confidence": final_confidence_score
         }
+        
+        error_accuracy = abs(final_output["price"] - ACTUAL_VALUE) / ACTUAL_VALUE 
+        accuracy = 1 - error_accuracy
+        final_output["accuracy"] = accuracy
+        print(f"Accuracy: {accuracy}")
+        print(f"Actual Value: {ACTUAL_VALUE}")
+        print(f"Predicted Value: {final_output['price']}")
         
         # Convert to JSON string
         final_json_string = json.dumps(final_output, indent=2)
