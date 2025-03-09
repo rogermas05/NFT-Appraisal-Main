@@ -579,6 +579,7 @@ Do not include any text outside the JSON structure or any markdown code blocks.
         print_colored(f"Accuracy: {accuracy:.2%}", "green")
         
         result_json["accuracy"] = accuracy
+        result_json["actual_value"] = ACTUAL_VALUE
         
         for model_id, data in analysis.items():
             result_json["models"][model_id] = {
