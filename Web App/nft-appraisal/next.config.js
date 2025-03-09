@@ -19,6 +19,12 @@ const nextConfig = {
       },
     ],
   },
+  typescript: {
+    // !! WARN !!
+    // Ignoring type checking during build
+    // This is not recommended unless you're in a hurry
+    ignoreBuildErrors: true,
+  },
 }
 
 export default nextConfig

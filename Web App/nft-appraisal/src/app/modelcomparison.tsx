@@ -9,8 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import type { ConsensusStep } from "./ConsensusAnimation";
-import { defaultConsensusSteps, NetworkAnimation } from "./ConsensusAnimation";
 import { useNFTData } from "./NftDataContext";
 
 // Available models for selection
@@ -25,12 +23,6 @@ type ModelId = (typeof AVAILABLE_MODELS)[number]["id"];
 export default function ModelComparison() {
   const [model1, setModel1] = useState<ModelId>("regression");
   const [model2, setModel2] = useState<ModelId>("confidence");
-  const [showAnimation1, setShowAnimation1] = useState(false);
-  const [showAnimation2, setShowAnimation2] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [consensusSteps, setConsensusSteps] = useState<ConsensusStep[]>(
-    defaultConsensusSteps,
-  );
   const { nftData, isAppraisalLoading, selectedModels, setSelectedModels } =
     useNFTData();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -221,13 +213,6 @@ export default function ModelComparison() {
     </>
   );
 
-  // Remove the old useEffect and keep only the animation content
-  const animationContent = (
-    <div className="flex h-[300px] items-center justify-center">
-      <NetworkAnimation steps={consensusSteps} currentStep={currentStep} />
-    </div>
-  );
-
   // Handle model selection with validation to prevent duplicate selections
   const handleModel1Change = (value: ModelId) => {
     // Check if the selected model is already chosen in the other window
@@ -274,12 +259,26 @@ export default function ModelComparison() {
     </div>
   );
 
-  // Create confidence tooltip content with standard deviation
+  // Create confidence tooltip content with weights standard deviation
   const confidenceTooltipContent = (modelId: ModelId, modelData: any) => {
     const baseText =
       "Confidence score represents how certain the model is about its prediction. Higher values indicate greater confidence in the estimated value.";
 
-    if (modelData && modelData.standard_deviation) {
+    if (modelId === "confidence" && modelData && modelData.weights_standard_deviation !== undefined) {
+      return (
+        <>
+          {baseText}
+          <div className="mt-2 border-t border-gray-600 pt-2">
+            <span className="font-semibold">Weights Standard Deviation:</span>{" "}
+            {modelData.weights_standard_deviation.toFixed(3)}
+            <p className="mt-1">
+              This value shows how much the weights between different language models vary. 
+              Lower standard deviation indicates more balanced contribution from all models.
+            </p>
+          </div>
+        </>
+      );
+    } else if (modelData && modelData.standard_deviation) {
       return (
         <>
           {baseText}
@@ -299,43 +298,107 @@ export default function ModelComparison() {
     return baseText;
   };
 
-  // Add these CSS classes to your component
-  const cardFlipStyles = `
-    .card-container {
-      perspective: 1000px;
-      height: 100%;
+  // Update the LLMWeightsDisplay component to include tooltips with text similarity and price change
+  const LLMWeightsDisplay = ({ modelData }: { modelData: any }) => {
+    if (!modelData || !modelData.models) return null;
+    
+    return (
+      <div className="rounded-lg bg-gray-800/50 p-6">
+        <div className="mb-2 flex items-center text-sm text-gray-400">
+          Model Weights
+          <InfoTooltip text="Shows how different language models contribute to the final prediction. Higher weights indicate greater influence on the result." />
+        </div>
+        <div className="space-y-3 mt-2">
+          {Object.entries(modelData.models).map(([modelName, data]: [string, any]) => (
+            <div key={modelName} className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-300">{modelName.split('/').pop()}</span>
+                  <InfoTooltip 
+                    text={
+                      <>
+                        <div className="space-y-1">
+                          <div><span className="font-semibold">Text Similarity:</span> {(data.text_similarity * 100).toFixed(1)}%</div>
+                          <div><span className="font-semibold">Price Change:</span> {(data.price_change * 100).toFixed(1)}%</div>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-400">
+                          Text similarity measures how well the model's explanation aligns with others.
+                          Price change shows how much the model adjusted its initial price estimate.
+                        </div>
+                      </>
+                    } 
+                  />
+                </div>
+                <span className="text-gray-400">{(data.weight * 100).toFixed(1)}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-700">
+                <div
+                  className="h-full rounded-full bg-purple-500/70"
+                  style={{ width: `${data.weight * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {modelData.weights_standard_deviation !== undefined && (
+          <div className="mt-3 text-xs text-gray-400">
+            <span className="font-semibold">Weight Deviation:</span> {modelData.weights_standard_deviation.toFixed(3)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Update the accuracy tooltip to include the actual sale price information
+  const accuracyTooltipContent = (modelData: any) => {
+    const baseText = "Accuracy score measures how close the model's predictions have been to actual sale prices historically. Higher values indicate better predictive performance.";
+    
+    if (modelData && modelData.actual_value !== undefined) {
+      return (
+        <>
+          {baseText}
+          <div className="mt-2 border-t border-gray-600 pt-2">
+            <span className="font-semibold">Actual Sale Price:</span> ${modelData.actual_value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            <p className="mt-1">
+              This is the verified price this NFT actually sold for in a recent transaction.
+            </p>
+          </div>
+        </>
+      );
     }
     
-    .card {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      transform-style: preserve-3d;
-      transition: transform 0.6s;
-    }
+    return baseText;
+  };
+
+  // Update the LLMPredictionsDisplay component to match text styling with LLMWeightsDisplay
+  const LLMPredictionsDisplay = ({ modelData }: { modelData: any }) => {
+    if (!modelData || !modelData.models) return null;
     
-    .card.flipped {
-      transform: rotateY(180deg);
-    }
-    
-    .card-face {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      backface-visibility: hidden;
-      overflow: auto;
-    }
-    
-    .card-back {
-      transform: rotateY(180deg);
-    }
-  `;
+    return (
+      <div className="rounded-lg bg-gray-800/50 p-6">
+        <div className="mb-2 flex items-center text-sm text-gray-400">
+          Individual Model Predictions
+          <InfoTooltip text="Shows the price predictions from each language model that contributed to the final aggregated price." />
+        </div>
+        <div className="space-y-3 mt-2">
+          {Object.entries(modelData.models).map(([modelName, price]: [string, any]) => (
+            <div key={modelName} className="flex justify-between items-center">
+              <span className="text-xs text-gray-300">{modelName.split('/').pop()}</span>
+              <span className="text-xs font-medium">${typeof price === 'number' ? price.toLocaleString() : price}</span>
+            </div>
+          ))}
+          {modelData.standard_deviation !== undefined && (
+            <div className="mt-3 pt-3 border-t border-gray-700 text-xs text-gray-400">
+              <span className="font-semibold">Standard Deviation:</span> ${modelData.standard_deviation.toFixed(2)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
-      {/* Add the CSS styles */}
-      <style jsx>{cardFlipStyles}</style>
-      
       {/* Error message toast */}
       {errorMessage && (
         <div className="fixed right-4 top-4 z-50 rounded-md bg-red-500 px-4 py-2 text-white shadow-lg duration-300 animate-in fade-in slide-in-from-top-5">
@@ -345,287 +408,229 @@ export default function ModelComparison() {
 
       <div className="flex flex-1 gap-6">
         {/* Model 1 Output */}
-        <div className="relative flex-1 card-container">
-          <div className={`card ${showAnimation1 ? 'flipped' : ''}`}>
-            {/* Front face - Model details */}
-            <div className="card-face flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
-              <div className="flex-1 space-y-6">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Model Prediction</h2>
-                    <Select value={model1} onValueChange={handleModel1Change}>
-                      <SelectTrigger className="w-60 rounded-full bg-blue-500/20 px-3 py-1 text-sm text-blue-400">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-200 text-gray-900">
-                        {AVAILABLE_MODELS.map((model) => (
-                          <SelectItem
-                            key={model.id}
-                            value={model.id}
-                            className="hover:bg-gray-300 focus:bg-gray-300"
-                          >
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+        <div className="flex-1">
+          <div className="flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
+            <div className="flex-1 space-y-6">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold">Model Prediction</h2>
+                  <Select value={model1} onValueChange={handleModel1Change}>
+                    <SelectTrigger className="w-60 rounded-full bg-blue-500/20 px-3 py-1 text-sm text-blue-400">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-200 text-gray-900">
+                      {AVAILABLE_MODELS.map((model) => (
+                        <SelectItem
+                          key={model.id}
+                          value={model.id}
+                          className="hover:bg-gray-300 focus:bg-gray-300"
+                        >
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+              </div>
 
-                {/* Content section */}
-                {isAppraisalLoading ? (
-                  <LoadingSkeleton />
-                ) : (
-                  <>
-                    {/* Price Prediction */}
+              {/* Content section */}
+              {isAppraisalLoading ? (
+                <LoadingSkeleton />
+              ) : (
+                <>
+                  {/* Price Prediction */}
+                  <div className="rounded-lg bg-gray-800/50 p-6">
+                    <p className="mb-2 text-sm text-gray-400">
+                      Estimated Value
+                    </p>
+                    <p className="text-3xl font-bold text-blue-400">
+                      {model1Data
+                        ? `${getEthereumPrice(model1Data)} ETH ($${getUsdPrice(model1Data)})`
+                        : "-.-- ETH"}
+                    </p>
+                  </div>
+
+                  {/* Confidence Score */}
+                  <div className="rounded-lg bg-gray-800/50 p-6">
+                    <div className="mb-2 flex items-center text-sm text-gray-400">
+                      Confidence Score
+                      <InfoTooltip
+                        text={confidenceTooltipContent(model1, model1Data)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 flex-1 rounded-full bg-gray-700">
+                        <div
+                          className="h-full rounded-full bg-blue-500"
+                          style={{
+                            width: `${getConfidencePercentage(model1Data)}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <span className="text-sm font-medium">
+                        {getConfidencePercentage(model1Data)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Accuracy Score */}
+                  <div className="rounded-lg bg-gray-800/50 p-6">
+                    <div className="mb-2 flex items-center text-sm text-gray-400">
+                      Accuracy Score
+                      <InfoTooltip text={accuracyTooltipContent(model1Data)} />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 flex-1 rounded-full bg-gray-700">
+                        <div
+                          className="h-full rounded-full bg-green-500"
+                          style={{
+                            width: `${getAccuracyPercentage(model1Data)}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <span className="text-sm font-medium">
+                        {getAccuracyPercentage(model1Data)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Explanation Text - Only show if we have model data */}
+                  {model1Data && getModelExplanation(model1Data) && (
                     <div className="rounded-lg bg-gray-800/50 p-6">
                       <p className="mb-2 text-sm text-gray-400">
-                        Estimated Value
+                        Model Explanation
                       </p>
-                      <p className="text-3xl font-bold text-blue-400">
-                        {model1Data
-                          ? `${getEthereumPrice(model1Data)} ETH ($${getUsdPrice(model1Data)})`
-                          : "-.-- ETH"}
+                      <p className="whitespace-pre-wrap text-sm text-gray-200">
+                        {getModelExplanation(model1Data)}
                       </p>
                     </div>
+                  )}
 
-                    {/* Confidence Score */}
-                    <div className="rounded-lg bg-gray-800/50 p-6">
-                      <div className="mb-2 flex items-center text-sm text-gray-400">
-                        Confidence Score
-                        <InfoTooltip
-                          text={confidenceTooltipContent(model1, model1Data)}
-                        />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="h-3 flex-1 rounded-full bg-gray-700">
-                          <div
-                            className="h-full rounded-full bg-blue-500"
-                            style={{
-                              width: `${getConfidencePercentage(model1Data)}%`,
-                            }}
-                          ></div>
-                        </div>
-                        <span className="text-sm font-medium">
-                          {getConfidencePercentage(model1Data)}%
-                        </span>
-                      </div>
-                    </div>
+                  {/* Add the LLM predictions display for the centralized model */}
+                  {model1 === "regression" && model1Data && model1Data.models && (
+                    <LLMPredictionsDisplay modelData={model1Data} />
+                  )}
 
-                    {/* Accuracy Score */}
-                    <div className="rounded-lg bg-gray-800/50 p-6">
-                      <div className="mb-2 flex items-center text-sm text-gray-400">
-                        Accuracy Score
-                        <InfoTooltip text="Accuracy score measures how close the model's predictions have been to actual sale prices historically. Higher values indicate better predictive performance." />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="h-3 flex-1 rounded-full bg-gray-700">
-                          <div
-                            className="h-full rounded-full bg-green-500"
-                            style={{
-                              width: `${getAccuracyPercentage(model1Data)}%`,
-                            }}
-                          ></div>
-                        </div>
-                        <span className="text-sm font-medium">
-                          {getAccuracyPercentage(model1Data)}%
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Explanation Text - Only show if we have model data */}
-                    {model1Data && getModelExplanation(model1Data) && (
-                      <div className="rounded-lg bg-gray-800/50 p-6">
-                        <p className="mb-2 text-sm text-gray-400">
-                          Model Explanation
-                        </p>
-                        <p className="whitespace-pre-wrap text-sm text-gray-200">
-                          {getModelExplanation(model1Data)}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-            
-            {/* Back face - Animation */}
-            <div className="card-face card-back flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
-              <div className="flex-1 space-y-6">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Model Animation</h2>
-                    <Select value={model1} onValueChange={handleModel1Change}>
-                      <SelectTrigger className="w-60 rounded-full bg-blue-500/20 px-3 py-1 text-sm text-blue-400">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-200 text-gray-900">
-                        {AVAILABLE_MODELS.map((model) => (
-                          <SelectItem
-                            key={model.id}
-                            value={model.id}
-                            className="hover:bg-gray-300 focus:bg-gray-300"
-                          >
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                <div className="flex flex-1 items-center justify-center">
-                  <NetworkAnimation
-                    steps={consensusSteps}
-                    currentStep={currentStep}
-                    contractAddress={contractAddress}
-                    tokenId={tokenId}
-                  />
-                </div>
-              </div>
+                  {/* Keep the existing LLM weights display for the confidence model */}
+                  {model1 === "confidence" && model1Data && model1Data.models && (
+                    <LLMWeightsDisplay modelData={model1Data} />
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
 
         {/* Model 2 Output */}
-        <div className="relative flex-1 card-container">
-          <div className={`card ${showAnimation2 ? 'flipped' : ''}`}>
-            {/* Front face - Model details */}
-            <div className="card-face flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
-              <div className="flex-1 space-y-6">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Model Prediction</h2>
-                    <Select value={model2} onValueChange={handleModel2Change}>
-                      <SelectTrigger className="w-60 rounded-full bg-purple-500/20 px-3 py-1 text-sm text-purple-400">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-200 text-gray-900">
-                        {AVAILABLE_MODELS.map((model) => (
-                          <SelectItem
-                            key={model.id}
-                            value={model.id}
-                            className="hover:bg-gray-300 focus:bg-gray-300"
-                          >
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+        <div className="flex-1">
+          <div className="flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
+            <div className="flex-1 space-y-6">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold">Model Prediction</h2>
+                  <Select value={model2} onValueChange={handleModel2Change}>
+                    <SelectTrigger className="w-60 rounded-full bg-purple-500/20 px-3 py-1 text-sm text-purple-400">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-200 text-gray-900">
+                      {AVAILABLE_MODELS.map((model) => (
+                        <SelectItem
+                          key={model.id}
+                          value={model.id}
+                          className="hover:bg-gray-300 focus:bg-gray-300"
+                        >
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+              </div>
 
-                {/* Content section */}
-                {isAppraisalLoading ? (
-                  <LoadingSkeleton />
-                ) : (
-                  <>
-                    {/* Price Prediction */}
+              {/* Content section */}
+              {isAppraisalLoading ? (
+                <LoadingSkeleton />
+              ) : (
+                <>
+                  {/* Price Prediction */}
+                  <div className="rounded-lg bg-gray-800/50 p-6">
+                    <p className="mb-2 text-sm text-gray-400">
+                      Estimated Value
+                    </p>
+                    <p className="text-3xl font-bold text-purple-400">
+                      {model2Data
+                        ? `${getEthereumPrice(model2Data)} ETH ($${getUsdPrice(model2Data)})`
+                        : "-.-- ETH"}
+                    </p>
+                  </div>
+
+                  {/* Confidence Score */}
+                  <div className="rounded-lg bg-gray-800/50 p-6">
+                    <div className="mb-2 flex items-center text-sm text-gray-400">
+                      Confidence Score
+                      <InfoTooltip
+                        text={confidenceTooltipContent(model2, model2Data)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 flex-1 rounded-full bg-gray-700">
+                        <div
+                          className="h-full rounded-full bg-purple-500"
+                          style={{
+                            width: `${getConfidencePercentage(model2Data)}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <span className="text-sm font-medium">
+                        {getConfidencePercentage(model2Data)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Accuracy Score */}
+                  <div className="rounded-lg bg-gray-800/50 p-6">
+                    <div className="mb-2 flex items-center text-sm text-gray-400">
+                      Accuracy Score
+                      <InfoTooltip text={accuracyTooltipContent(model2Data)} />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 flex-1 rounded-full bg-gray-700">
+                        <div
+                          className="h-full rounded-full bg-green-500"
+                          style={{
+                            width: `${getAccuracyPercentage(model2Data)}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <span className="text-sm font-medium">
+                        {getAccuracyPercentage(model2Data)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Explanation Text - Only show if we have model data */}
+                  {model2Data && getModelExplanation(model2Data) && (
                     <div className="rounded-lg bg-gray-800/50 p-6">
                       <p className="mb-2 text-sm text-gray-400">
-                        Estimated Value
+                        Model Explanation
                       </p>
-                      <p className="text-3xl font-bold text-purple-400">
-                        {model2Data
-                          ? `${getEthereumPrice(model2Data)} ETH ($${getUsdPrice(model2Data)})`
-                          : "-.-- ETH"}
+                      <p className="whitespace-pre-wrap text-sm text-gray-200">
+                        {getModelExplanation(model2Data)}
                       </p>
                     </div>
+                  )}
 
-                    {/* Confidence Score */}
-                    <div className="rounded-lg bg-gray-800/50 p-6">
-                      <div className="mb-2 flex items-center text-sm text-gray-400">
-                        Confidence Score
-                        <InfoTooltip
-                          text={confidenceTooltipContent(model2, model2Data)}
-                        />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="h-3 flex-1 rounded-full bg-gray-700">
-                          <div
-                            className="h-full rounded-full bg-purple-500"
-                            style={{
-                              width: `${getConfidencePercentage(model2Data)}%`,
-                            }}
-                          ></div>
-                        </div>
-                        <span className="text-sm font-medium">
-                          {getConfidencePercentage(model2Data)}%
-                        </span>
-                      </div>
-                    </div>
+                  {/* Add the LLM predictions display for the centralized model */}
+                  {model2 === "regression" && model2Data && model2Data.models && (
+                    <LLMPredictionsDisplay modelData={model2Data} />
+                  )}
 
-                    {/* Accuracy Score */}
-                    <div className="rounded-lg bg-gray-800/50 p-6">
-                      <div className="mb-2 flex items-center text-sm text-gray-400">
-                        Accuracy Score
-                        <InfoTooltip text="Accuracy score measures how close the model's predictions have been to actual sale prices historically. Higher values indicate better predictive performance." />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="h-3 flex-1 rounded-full bg-gray-700">
-                          <div
-                            className="h-full rounded-full bg-green-500"
-                            style={{
-                              width: `${getAccuracyPercentage(model2Data)}%`,
-                            }}
-                          ></div>
-                        </div>
-                        <span className="text-sm font-medium">
-                          {getAccuracyPercentage(model2Data)}%
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Explanation Text - Only show if we have model data */}
-                    {model2Data && getModelExplanation(model2Data) && (
-                      <div className="rounded-lg bg-gray-800/50 p-6">
-                        <p className="mb-2 text-sm text-gray-400">
-                          Model Explanation
-                        </p>
-                        <p className="whitespace-pre-wrap text-sm text-gray-200">
-                          {getModelExplanation(model2Data)}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-            
-            {/* Back face - Animation */}
-            <div className="card-face card-back flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
-              <div className="flex-1 space-y-6">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Model Animation</h2>
-                    <Select value={model2} onValueChange={handleModel2Change}>
-                      <SelectTrigger className="w-60 rounded-full bg-purple-500/20 px-3 py-1 text-sm text-purple-400">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-200 text-gray-900">
-                        {AVAILABLE_MODELS.map((model) => (
-                          <SelectItem
-                            key={model.id}
-                            value={model.id}
-                            className="hover:bg-gray-300 focus:bg-gray-300"
-                          >
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                <div className="flex flex-1 items-center justify-center">
-                  <NetworkAnimation
-                    steps={consensusSteps}
-                    currentStep={currentStep}
-                    contractAddress={contractAddress}
-                    tokenId={tokenId}
-                  />
-                </div>
-              </div>
+                  {/* Keep the existing LLM weights display for the confidence model */}
+                  {model2 === "confidence" && model2Data && model2Data.models && (
+                    <LLMWeightsDisplay modelData={model2Data} />
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
