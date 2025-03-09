@@ -576,7 +576,10 @@ Do not include any text outside the JSON structure or any markdown code blocks.
         
         predicted_price = result_json["price"]
         error_accuracy = abs((ACTUAL_VALUE - predicted_price)) / ACTUAL_VALUE
-        accuracy = 1 - error_accuracy
+        if 1 - error_accuracy < 0:
+            accuracy = 0
+        else:
+            accuracy = 1 - error_accuracy
         
         print_colored(f"Predicted Price: ${predicted_price:.2f}", "green")
         print_colored(f"Actual Price: ${ACTUAL_VALUE:.2f}", "green")
