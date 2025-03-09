@@ -17,6 +17,7 @@ from flare_ai_consensus.utils import load_json, parse_chat_response
 from datetime import datetime
 
 from dotenv import load_dotenv
+from sample import sample_data
 
 load_dotenv()
 
