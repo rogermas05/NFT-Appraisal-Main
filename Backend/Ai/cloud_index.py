@@ -524,8 +524,13 @@ async def process_nft_appraisal(contract_address: str, token_id: str):
         }
         
         error_accuracy = abs(final_output["price"] - ACTUAL_VALUE) / ACTUAL_VALUE 
-        accuracy = 1 - error_accuracy
+        if 1 - error_accuracy < 0:
+            accuracy = 0
+        else:
+            accuracy = 1 - error_accuracy
+        
         final_output["accuracy"] = accuracy
+        
         print(f"Accuracy: {accuracy}")
         print(f"Actual Value: {ACTUAL_VALUE}")
         print(f"Predicted Value: {final_output['price']}")
