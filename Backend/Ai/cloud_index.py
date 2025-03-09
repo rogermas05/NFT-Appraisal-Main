@@ -258,7 +258,7 @@ async def fetch_nft_data(contract_address: str, token_id: str):
         sys.path.append(parent_dir)
     
     # Now import using relative path
-    from Backend.AI.Sideinfo_api.sideinfo import main
+    from Backend.Ai.Sideinfo_api.sideinfo import main
     
     # Call the main function directly
     return main(contract_address, token_id)
