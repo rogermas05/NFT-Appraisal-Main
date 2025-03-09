@@ -25,8 +25,8 @@ type ModelId = (typeof AVAILABLE_MODELS)[number]["id"];
 export default function ModelComparison() {
   const [model1, setModel1] = useState<ModelId>("regression");
   const [model2, setModel2] = useState<ModelId>("confidence");
-  const [showAnimation1, setShowAnimation1] = useState(true);
-  const [showAnimation2, setShowAnimation2] = useState(true);
+  const [showAnimation1, setShowAnimation1] = useState(false);
+  const [showAnimation2, setShowAnimation2] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [consensusSteps, setConsensusSteps] = useState<ConsensusStep[]>(
     defaultConsensusSteps,
@@ -179,15 +179,6 @@ export default function ModelComparison() {
       }
     }
   }, [nftData, model1, model2]);
-
-  // Add this useEffect to reset the cards to animation side when a new NFT is entered
-  useEffect(() => {
-    if (isAppraisalLoading) {
-      // When a new appraisal is loading, flip the cards to the animation side
-      setShowAnimation1(true);
-      setShowAnimation2(true);
-    }
-  }, [isAppraisalLoading]);
 
   // Loading skeleton component
   const LoadingSkeleton = () => (
@@ -379,14 +370,6 @@ export default function ModelComparison() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-full bg-blue-500/20 px-4 py-2 text-sm text-blue-400 transition-colors hover:bg-blue-500/30"
-                      onClick={() => setShowAnimation1(true)}
-                    >
-                      Show Animation
-                    </button>
-                  </div>
                 </div>
 
                 {/* Content section */}
@@ -489,14 +472,6 @@ export default function ModelComparison() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-full bg-blue-500/20 px-4 py-2 text-sm text-blue-400 transition-colors hover:bg-blue-500/30"
-                      onClick={() => setShowAnimation1(false)}
-                    >
-                      Back to Model Details
-                    </button>
-                  </div>
                 </div>
                 
                 <div className="flex flex-1 items-center justify-center">
@@ -537,14 +512,6 @@ export default function ModelComparison() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-full bg-purple-500/20 px-4 py-2 text-sm text-purple-400 transition-colors hover:bg-purple-500/30"
-                      onClick={() => setShowAnimation2(true)}
-                    >
-                      Show Animation
-                    </button>
                   </div>
                 </div>
 
@@ -647,14 +614,6 @@ export default function ModelComparison() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-full bg-purple-500/20 px-4 py-2 text-sm text-purple-400 transition-colors hover:bg-purple-500/30"
-                      onClick={() => setShowAnimation2(false)}
-                    >
-                      Back to Model Details
-                    </button>
                   </div>
                 </div>
                 
