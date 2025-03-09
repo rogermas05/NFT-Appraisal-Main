@@ -29,32 +29,100 @@ export default function ModelComparison() {
   const [showAnimation2, setShowAnimation2] = useState(false)
   const [currentStep, setCurrentStep] = useState(0);
   const [consensusSteps, setConsensusSteps] = useState<ConsensusStep[]>(defaultConsensusSteps);
-  const { nftData, isAppraisalLoading } = useNFTData();
+  const { nftData, isAppraisalLoading, selectedModels, setSelectedModels } = useNFTData();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Get appraisal data for the centralized aggregator model
-  const appraisalData = nftData?.appraisalData;
+  // Get model-specific data instead of just appraisalData
+  const model1Data = nftData?.modelResults?.[model1];
+  const model2Data = nftData?.modelResults?.[model2];
   
-  // Calculate confidence percentage
-  const confidencePercentage = appraisalData ? 
-    Math.round(appraisalData.total_confidence * 100) : 
-    0;
-
-  // Get standard deviation for model predictions
-  const standardDeviation = appraisalData?.standard_deviation ?? 0;
-
-  // Add this near the top of your component
-  useEffect(() => {
-    if (appraisalData) {
-      console.log("Appraisal data received:", appraisalData);
-      console.log("Accuracy value:", appraisalData.accuracy);
+  // Updated helper functions to handle different API response formats
+  const getEthereumPrice = (modelData: any): string => {
+    if (!modelData) return "-.--";
+    
+    // Direct ethereum price if available
+    if (modelData.ethereum_price_usd !== undefined) {
+      return modelData.ethereum_price_usd.toFixed(2);
     }
-  }, [appraisalData]);
+    
+    // If the API only returns USD price (like confidence API), estimate ETH price
+    // Assuming current ETH price of ~$2,500 for conversion
+    if (modelData.price !== undefined) {
+      const estimatedEthPrice = modelData.price / 2500;
+      return estimatedEthPrice.toFixed(4);
+    }
+    
+    return "-.--";
+  };
 
-  // Calculate accuracy percentage
-  const accuracyPercentage = appraisalData && appraisalData.accuracy !== undefined ? 
-    Math.round(appraisalData.accuracy * 100) : 
-    0;
+  const getUsdPrice = (modelData: any): string => {
+    if (!modelData) return "-.--";
+    
+    // Direct USD price
+    if (modelData.price !== undefined) {
+      return modelData.price.toFixed(2);
+    }
+    
+    return "-.--";
+  };
+
+  const getConfidencePercentage = (modelData: any) => {
+    if (!modelData) return 0;
+    
+    // Different APIs use different field names for confidence
+    if (modelData.total_confidence !== undefined) {
+      return Math.round(modelData.total_confidence * 100);
+    }
+    
+    if (modelData.final_confidence_score !== undefined) {
+      return Math.round(modelData.final_confidence_score * 100);
+    }
+    
+    return 0;
+  };
+
+  const getAccuracyPercentage = (modelData: any) => {
+    if (!modelData || modelData.accuracy === undefined) return 0;
+    return Math.round(modelData.accuracy * 100);
+  };
+
+  const getModelExplanation = (modelData: any) => {
+    if (!modelData) return "";
+    
+    // Different APIs use different field names for explanation text
+    if (modelData.text) return modelData.text;
+    if (modelData.explanation) return modelData.explanation;
+    
+    return "";
+  };
+
+  // Create confidence tooltip content with standard deviation
+  const confidenceTooltipContent = (modelId: ModelId, modelData: any) => {
+    const baseText = "Confidence score represents how certain the model is about its prediction. Higher values indicate greater confidence in the estimated value.";
+    
+    if (modelData && modelData.standard_deviation) {
+      return (
+        <>
+          {baseText}
+          <div className="mt-2 pt-2 border-t border-gray-600">
+            <span className="font-semibold">Standard Deviation:</span> {modelData.standard_deviation.toFixed(2)}
+            <p className="mt-1">This value shows how much the predictions from different models vary. Lower standard deviation indicates better agreement between models.</p>
+          </div>
+        </>
+      );
+    }
+    
+    return baseText;
+  };
+
+  // Get contract address and token ID from nftData
+  const contractAddress = nftData?.contractAddress;
+  const tokenId = nftData?.tokenId;
+
+  // Update this useEffect to sync model selections with context
+  useEffect(() => {
+    setSelectedModels([model1, model2]);
+  }, [model1, model2, setSelectedModels]);
 
   // Loading skeleton component
   const LoadingSkeleton = () => (
@@ -141,29 +209,6 @@ export default function ModelComparison() {
     </div>
   );
 
-  // Create confidence tooltip content with standard deviation
-  const confidenceTooltipContent = (modelId: ModelId) => {
-    const baseText = "Confidence score represents how certain the model is about its prediction. Higher values indicate greater confidence in the estimated value.";
-    
-    if (modelId === "regression" && appraisalData && appraisalData.standard_deviation) {
-      return (
-        <>
-          {baseText}
-          <div className="mt-2 pt-2 border-t border-gray-600">
-            <span className="font-semibold">Standard Deviation:</span> {appraisalData.standard_deviation.toFixed(2)}
-            <p className="mt-1">This value shows how much the predictions from different models vary. Lower standard deviation indicates better agreement between models.</p>
-          </div>
-        </>
-      );
-    }
-    
-    return baseText;
-  };
-
-  // Get contract address and token ID from nftData
-  const contractAddress = nftData?.contractAddress;
-  const tokenId = nftData?.tokenId;
-
   return (
     <div className="flex-1 flex flex-col gap-6 p-6">
       {/* Error message toast */}
@@ -217,8 +262,8 @@ export default function ModelComparison() {
                     <div className="bg-gray-800/50 rounded-lg p-6">
                       <p className="text-sm text-gray-400 mb-2">Estimated Value</p>
                       <p className="text-3xl font-bold text-blue-400">
-                        {model1 === "regression" && appraisalData ? 
-                          `${appraisalData.ethereum_price_usd.toFixed(2)} ETH ($${appraisalData.price.toFixed(2)})` : 
+                        {model1Data ? 
+                          `${getEthereumPrice(model1Data)} ETH ($${getUsdPrice(model1Data)})` : 
                           "-.-- ETH"}
                       </p>
                     </div>
@@ -227,23 +272,17 @@ export default function ModelComparison() {
                     <div className="bg-gray-800/50 rounded-lg p-6">
                       <div className="text-sm text-gray-400 mb-2 flex items-center">
                         Confidence Score
-                        <InfoTooltip text={confidenceTooltipContent(model1)} />
+                        <InfoTooltip text={confidenceTooltipContent(model1, model1Data)} />
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-3 bg-gray-700 rounded-full">
                           <div 
                             className="h-full bg-blue-500 rounded-full"
-                            style={{ 
-                              width: model1 === "regression" && appraisalData ? 
-                                `${confidencePercentage}%` : 
-                                "0%" 
-                            }}
+                            style={{ width: `${getConfidencePercentage(model1Data)}%` }}
                           ></div>
                         </div>
                         <span className="text-sm font-medium">
-                          {model1 === "regression" && appraisalData ? 
-                            `${confidencePercentage}%` : 
-                            "0%"}
+                          {getConfidencePercentage(model1Data)}%
                         </span>
                       </div>
                     </div>
@@ -258,26 +297,22 @@ export default function ModelComparison() {
                         <div className="flex-1 h-3 bg-gray-700 rounded-full">
                           <div 
                             className="h-full bg-green-500 rounded-full"
-                            style={{ 
-                              width: model1 === "regression" && appraisalData ? 
-                                `${accuracyPercentage}%` : 
-                                "0%" 
-                            }}
+                            style={{ width: `${getAccuracyPercentage(model1Data)}%` }}
                           ></div>
                         </div>
                         <span className="text-sm font-medium">
-                          {model1 === "regression" && appraisalData ? 
-                            `${accuracyPercentage}%` : 
-                            "0%"}
+                          {getAccuracyPercentage(model1Data)}%
                         </span>
                       </div>
                     </div>
 
-                    {/* Explanation Text - Only show if we have appraisal data */}
-                    {model1 === "regression" && appraisalData && (
+                    {/* Explanation Text - Only show if we have model data */}
+                    {model1Data && getModelExplanation(model1Data) && (
                       <div className="bg-gray-800/50 rounded-lg p-6">
                         <p className="text-sm text-gray-400 mb-2">Model Explanation</p>
-                        <p className="text-sm text-gray-200 whitespace-pre-wrap">{appraisalData.text}</p>
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap">
+                          {getModelExplanation(model1Data)}
+                        </p>
                       </div>
                     )}
                   </>
@@ -337,8 +372,8 @@ export default function ModelComparison() {
                     <div className="bg-gray-800/50 rounded-lg p-6">
                       <p className="text-sm text-gray-400 mb-2">Estimated Value</p>
                       <p className="text-3xl font-bold text-purple-400">
-                        {model2 === "regression" && appraisalData ? 
-                          `${appraisalData.ethereum_price_usd.toFixed(2)} ETH ($${appraisalData.price.toFixed(2)})` : 
+                        {model2Data ? 
+                          `${getEthereumPrice(model2Data)} ETH ($${getUsdPrice(model2Data)})` : 
                           "-.-- ETH"}
                       </p>
                     </div>
@@ -347,23 +382,17 @@ export default function ModelComparison() {
                     <div className="bg-gray-800/50 rounded-lg p-6">
                       <div className="text-sm text-gray-400 mb-2 flex items-center">
                         Confidence Score
-                        <InfoTooltip text={confidenceTooltipContent(model2)} />
+                        <InfoTooltip text={confidenceTooltipContent(model2, model2Data)} />
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-3 bg-gray-700 rounded-full">
                           <div 
                             className="h-full bg-purple-500 rounded-full"
-                            style={{ 
-                              width: model2 === "regression" && appraisalData ? 
-                                `${confidencePercentage}%` : 
-                                "0%" 
-                            }}
+                            style={{ width: `${getConfidencePercentage(model2Data)}%` }}
                           ></div>
                         </div>
                         <span className="text-sm font-medium">
-                          {model2 === "regression" && appraisalData ? 
-                            `${confidencePercentage}%` : 
-                            "0%"}
+                          {getConfidencePercentage(model2Data)}%
                         </span>
                       </div>
                     </div>
@@ -378,26 +407,22 @@ export default function ModelComparison() {
                         <div className="flex-1 h-3 bg-gray-700 rounded-full">
                           <div 
                             className="h-full bg-green-500 rounded-full"
-                            style={{ 
-                              width: model2 === "regression" && appraisalData ? 
-                                `${accuracyPercentage}%` : 
-                                "0%" 
-                            }}
+                            style={{ width: `${getAccuracyPercentage(model2Data)}%` }}
                           ></div>
                         </div>
                         <span className="text-sm font-medium">
-                          {model2 === "regression" && appraisalData ? 
-                            `${accuracyPercentage}%` : 
-                            "0%"}
+                          {getAccuracyPercentage(model2Data)}%
                         </span>
                       </div>
                     </div>
 
-                    {/* Explanation Text - Only show if we have appraisal data */}
-                    {model2 === "regression" && appraisalData && (
+                    {/* Explanation Text - Only show if we have model data */}
+                    {model2Data && getModelExplanation(model2Data) && (
                       <div className="bg-gray-800/50 rounded-lg p-6">
                         <p className="text-sm text-gray-400 mb-2">Model Explanation</p>
-                        <p className="text-sm text-gray-200 whitespace-pre-wrap">{appraisalData.text}</p>
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap">
+                          {getModelExplanation(model2Data)}
+                        </p>
                       </div>
                     )}
                   </>

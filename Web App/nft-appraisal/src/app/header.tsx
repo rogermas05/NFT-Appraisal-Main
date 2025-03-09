@@ -18,7 +18,12 @@ export default function Header() {
   const [nftLink, setNftLink] = useState("")
   const [contractAddress, setContractAddress] = useState("")
   const [tokenId, setTokenId] = useState("")
-  const { setNftData, setIsLoading, setIsAppraisalLoading } = useNFTData()
+  const { 
+    setNftData, 
+    setIsLoading, 
+    setIsAppraisalLoading,
+    selectedModels
+  } = useNFTData()
 
   const clearInputs = () => {
     setNftLink("")
@@ -48,15 +53,31 @@ export default function Header() {
         }
       }
 
-      // Start both API requests in parallel
+      // Start NFT data request
       const nftDataPromise = fetch(
         `http://35.193.174.113:8081/get_nft_data?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
       );
       
-      const appraisalPromise = fetch(
-        `http://35.193.174.113:8080/centralized_appraise?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
-      );
-
+      // Map of model IDs to their API endpoints and ports
+      const modelConfig: Record<string, {endpoint: string, port: string}> = {
+        'regression': { endpoint: 'centralized_appraise', port: '8080' },
+        'confidence': { endpoint: 'confidence_appraise', port: '8082' },
+        'singular': { endpoint: 'singular_model_appraise', port: '8080' } // Assuming this uses the same port as centralized
+      };
+      
+      // Create object to store model-specific API promises
+      const modelPromises: Record<string, Promise<Response>> = {};
+      
+      // Only fetch data for selected models
+      for (const modelId of selectedModels) {
+        if (modelConfig[modelId]) {
+          const { endpoint, port } = modelConfig[modelId];
+          modelPromises[modelId] = fetch(
+            `http://35.193.174.113:${port}/${endpoint}?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
+          );
+        }
+      }
+      
       // Handle NFT data first
       const response = await nftDataPromise;
       if (!response.ok) {
@@ -78,32 +99,42 @@ export default function Header() {
           ? `${lastSale.price_ethereum} ETH ($${lastSale.price_usd.toFixed(2)})` 
           : '-',
         imageUrl: data.image ? convertIpfsUrl(data.image) : undefined,
-        appraisalData: undefined // Initially undefined
+        modelResults: {} // Initialize empty model results
       });
 
       // Set loading to false after NFT data is loaded
       setIsLoading(false);
 
-      // Then handle appraisal data when it completes
+      // Then handle model-specific data when it completes
       try {
-        const appraisalResponse = await appraisalPromise;
-        if (appraisalResponse.ok) {
-          const appraisalData = await appraisalResponse.json();
-          
-          // Update only the appraisal data, preserving the rest of the NFT data
-          setNftData(prevData => {
-            if (prevData) {
-              return {
-                ...prevData,
-                appraisalData: appraisalData
-              };
+        const modelResults: Record<string, any> = {};
+        
+        // Process each model response
+        for (const [modelId, promise] of Object.entries(modelPromises)) {
+          try {
+            const modelResponse = await promise;
+            if (modelResponse.ok) {
+              const responseData = await modelResponse.json();
+              console.log(`Data received for model ${modelId}:`, responseData);
+              modelResults[modelId] = responseData;
             }
-            return prevData;
-          });
+          } catch (error) {
+            console.error(`Error fetching data for model ${modelId}:`, error);
+          }
         }
+        
+        // Update NFT data with all model results
+        setNftData(prevData => {
+          if (prevData) {
+            return {
+              ...prevData,
+              modelResults
+            };
+          }
+          return prevData;
+        });
       } catch (appraisalError) {
         console.error('Error fetching appraisal data:', appraisalError);
-        // This error doesn't affect the main NFT data display
       } finally {
         setIsAppraisalLoading(false);
       }
