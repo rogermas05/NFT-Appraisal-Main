@@ -9,6 +9,8 @@ import textwrap
 import time
 import structlog
 from datetime import datetime
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
 from flare_ai_consensus.settings import Settings, Message
@@ -23,10 +25,14 @@ from flare_ai_consensus.consensus.confidence.confidence_embeddings import (
 # Import sample data
 from sample import sample_data
 from dotenv import load_dotenv
+from Backend.AI.Sideinfo_api.sideinfo import main as get_nft_data
 
 # Load environment variables
 load_dotenv()
 
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app)
 
 ACCURACY_METRIC_DESIRED = True
 
@@ -620,15 +626,19 @@ Do not include any text outside the JSON structure or any markdown code blocks.
     return aggregated_text
 
 
-async def main():
+async def run_confidence_consensus(contract_address, token_id, date_to_predict=None, actual_value=None):
+    """Run the confidence consensus process for a given NFT data"""
     import random
+    
+    # Get NFT data from sideinfo API
+    nft_data = get_nft_data(contract_address, token_id)
     
     # Load API key from environment variable
     api_key = os.environ.get("OPEN_ROUTER_API_KEY", "")
     if not api_key:
         print_colored("Error: OPEN_ROUTER_API_KEY environment variable not set.", "red")
         print("Please set your OpenRouter API key in your .env file")
-        return
+        return {"error": "API key not set"}
 
     # Initialize the settings
     settings = Settings()
@@ -653,6 +663,10 @@ async def main():
     # Patch the provider for better logging
     provider = await patch_provider_for_logging(provider)
     
+    # Use the most recent date from sales history if date_to_predict is not provided
+    if not date_to_predict and nft_data.get("sales_history"):
+        most_recent_date = nft_data["sales_history"][0]["date"]
+        date_to_predict = datetime.strptime(most_recent_date, "%Y-%m-%d %H:%M:%S").strftime("%B, %Y")
     
     # Define the NFT appraisal conversation
     content_prompt = """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this specific date, which is $$$$$$. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST be in JSON format starting with a single value of price in USD, followed by a detailed explanation of your reasoning.
@@ -704,11 +718,11 @@ async def main():
     nft_appraisal_conversation = [
         {
             "role": "system",
-            "content": content_prompt.replace("$$$$$$", DATE_TO_PREDICT, 1)
-            },
+            "content": content_prompt.replace("$$$$$$", date_to_predict or "the current date", 1)
+        },
         {
             "role": "user",
-            "content": f"Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Here is the sample data: {sample_data}. "
+            "content": f"Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Here is the sample data: {nft_data}."
         }
     ]
     
@@ -795,8 +809,40 @@ async def main():
         # Close the provider's HTTP client
         await provider.close()
 
+    # Return the final consensus result as JSON
+    try:
+        return json.loads(final_consensus)
+    except:
+        return {"error": "Failed to parse final consensus result"}
+
+# Add Flask route to handle API requests
+@app.route('/nft_appraisal', methods=['GET'])
+def nft_appraisal():
+    contract_address = request.args.get('contract_address')
+    token_id = request.args.get('token_id')
+    date_to_predict = request.args.get('date')
+    
+    if not contract_address or not token_id:
+        return jsonify({"error": "Missing contract_address or token_id parameters"}), 400
+    
+    try:
+        # Run the consensus process asynchronously
+        result = asyncio.run(run_confidence_consensus(
+            contract_address=contract_address,
+            token_id=token_id,
+            date_to_predict=date_to_predict
+        ))
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Update the main function to run the Flask app
+def main():
+    # Set the port from environment variable or use default
+    port = int(os.environ.get('PORT', 8080))
+    app.run(debug=True, host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
     # Import needed modules for statistics
     import statistics
-    asyncio.run(main())
+    main()

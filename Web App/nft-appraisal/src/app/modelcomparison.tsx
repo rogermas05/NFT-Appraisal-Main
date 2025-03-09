@@ -130,7 +130,7 @@ export default function ModelComparison() {
   };
 
   // Add tooltip component for reuse
-  const InfoTooltip = ({ text, children }: { text: string, children?: React.ReactNode }) => (
+  const InfoTooltip = ({ text, children }: { text: React.ReactNode, children?: React.ReactNode }) => (
     <div className="group relative inline-block ml-1">
       <Info size={16} className="text-gray-400 hover:text-gray-300 cursor-help" />
       <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-2 bg-gray-700 text-xs text-gray-200 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
@@ -221,10 +221,10 @@ export default function ModelComparison() {
 
                     {/* Confidence Score */}
                     <div className="bg-gray-800/50 rounded-lg p-6">
-                      <p className="text-sm text-gray-400 mb-2 flex items-center">
+                      <div className="text-sm text-gray-400 mb-2 flex items-center">
                         Confidence Score
                         <InfoTooltip text={confidenceTooltipContent(model1)} />
-                      </p>
+                      </div>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-3 bg-gray-700 rounded-full">
                           <div 
@@ -246,10 +246,10 @@ export default function ModelComparison() {
 
                     {/* Accuracy Score */}
                     <div className="bg-gray-800/50 rounded-lg p-6">
-                      <p className="text-sm text-gray-400 mb-2 flex items-center">
+                      <div className="text-sm text-gray-400 mb-2 flex items-center">
                         Accuracy Score
                         <InfoTooltip text="Accuracy score measures how close the model's predictions have been to actual sale prices historically. Higher values indicate better predictive performance." />
-                      </p>
+                      </div>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-3 bg-gray-700 rounded-full">
                           <div 
@@ -338,10 +338,10 @@ export default function ModelComparison() {
 
                     {/* Confidence Score */}
                     <div className="bg-gray-800/50 rounded-lg p-6">
-                      <p className="text-sm text-gray-400 mb-2 flex items-center">
+                      <div className="text-sm text-gray-400 mb-2 flex items-center">
                         Confidence Score
                         <InfoTooltip text={confidenceTooltipContent(model2)} />
-                      </p>
+                      </div>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-3 bg-gray-700 rounded-full">
                           <div 
@@ -363,10 +363,10 @@ export default function ModelComparison() {
 
                     {/* Accuracy Score */}
                     <div className="bg-gray-800/50 rounded-lg p-6">
-                      <p className="text-sm text-gray-400 mb-2 flex items-center">
+                      <div className="text-sm text-gray-400 mb-2 flex items-center">
                         Accuracy Score
                         <InfoTooltip text="Accuracy score measures how close the model's predictions have been to actual sale prices historically. Higher values indicate better predictive performance." />
-                      </p>
+                      </div>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-3 bg-gray-700 rounded-full">
                           <div 
