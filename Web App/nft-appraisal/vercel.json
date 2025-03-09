@@ -1,3 +1,8 @@
 {
-  "buildCommand": "npm run build || true"
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "routes": [
+    { "src": "/(.*)", "dest": "/" }
+  ]
 } 
