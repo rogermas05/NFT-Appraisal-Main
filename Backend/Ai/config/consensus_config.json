@@ -1,7 +1,7 @@
 {
     "models": [
         {
-            "id": "meta-llama/llama-3.2-3b-instruct:free",
+            "id": "qwen/qwen-vl-plus:free",
             "max_tokens": 3500,
             "temperature": 0.7
         },
@@ -11,7 +11,7 @@
             "temperature": 0.7
         },
         {
-            "id": "google/gemini-2.0-flash-001",
+            "id": "google/gemini-2.0-flash-lite-preview-02-05:free",
             "max_tokens": 3500,
             "temperature": 0.7
         }
@@ -19,7 +19,7 @@
     "aggregator": [
         {
             "model": {
-                "id": "google/gemini-2.0-flash-001",
+                "id": "openai/o3-mini-high",
                 "max_tokens": 3500,
                 "temperature": 0.8
             },
