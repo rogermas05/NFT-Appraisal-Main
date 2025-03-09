@@ -245,18 +245,12 @@ async def run_consensus_with_data(
 
 
 async def fetch_nft_data(contract_address: str, token_id: str):
-    """Fetch NFT metadata from the API endpoint"""
-    url = "https://get-nft-data-dkwdhhyv7q-uc.a.run.app"
-    params = {
-        "contract_address": contract_address,
-        "token_id": token_id
-    }
+    """Fetch NFT metadata using the main function from sideinfo.py"""
+    # Import the main function from sideinfo.py
+    from Backend.AI.Sideinfo_api.sideinfo import main
     
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params) as response:
-            if response.status != 200:
-                raise Exception(f"API request failed with status {response.status}")
-            return await response.json()
+    # Call the main function directly
+    return main(contract_address, token_id)
 
 
 async def fetch_ethereum_price():
