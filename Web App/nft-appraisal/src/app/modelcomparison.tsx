@@ -25,8 +25,8 @@ type ModelId = (typeof AVAILABLE_MODELS)[number]["id"];
 export default function ModelComparison() {
   const [model1, setModel1] = useState<ModelId>("regression");
   const [model2, setModel2] = useState<ModelId>("confidence");
-  const [showAnimation1, setShowAnimation1] = useState(false);
-  const [showAnimation2, setShowAnimation2] = useState(false);
+  const [showAnimation1, setShowAnimation1] = useState(true);
+  const [showAnimation2, setShowAnimation2] = useState(true);
   const [currentStep, setCurrentStep] = useState(0);
   const [consensusSteps, setConsensusSteps] = useState<ConsensusStep[]>(
     defaultConsensusSteps,
@@ -142,6 +142,36 @@ export default function ModelComparison() {
     console.log("Contract Address:", contractAddress);
     console.log("Token ID:", tokenId);
   }, [nftData, contractAddress, tokenId]);
+
+  // Add this useEffect to detect the final_result event and flip the cards
+  useEffect(() => {
+    // Check if we have model data and if it contains the final_result event
+    if (nftData?.modelResults) {
+      const model1Data = nftData.modelResults[model1];
+      const model2Data = nftData.modelResults[model2];
+      
+      // Check if model1 has final_result
+      if (model1Data && 'final_result' in model1Data) {
+        // Flip the card back to show the price appraisal
+        setShowAnimation1(false);
+      }
+      
+      // Check if model2 has final_result
+      if (model2Data && 'final_result' in model2Data) {
+        // Flip the card back to show the price appraisal
+        setShowAnimation2(false);
+      }
+    }
+  }, [nftData, model1, model2]);
+
+  // Add this useEffect to reset the cards to animation side when a new NFT is entered
+  useEffect(() => {
+    if (isAppraisalLoading) {
+      // When a new appraisal is loading, flip the cards to the animation side
+      setShowAnimation1(true);
+      setShowAnimation2(true);
+    }
+  }, [isAppraisalLoading]);
 
   // Loading skeleton component
   const LoadingSkeleton = () => (
@@ -262,8 +292,43 @@ export default function ModelComparison() {
     return baseText;
   };
 
+  // Add these CSS classes to your component
+  const cardFlipStyles = `
+    .card-container {
+      perspective: 1000px;
+      height: 100%;
+    }
+    
+    .card {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transition: transform 0.6s;
+    }
+    
+    .card.flipped {
+      transform: rotateY(180deg);
+    }
+    
+    .card-face {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      overflow: auto;
+    }
+    
+    .card-back {
+      transform: rotateY(180deg);
+    }
+  `;
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
+      {/* Add the CSS styles */}
+      <style jsx>{cardFlipStyles}</style>
+      
       {/* Error message toast */}
       {errorMessage && (
         <div className="fixed right-4 top-4 z-50 rounded-md bg-red-500 px-4 py-2 text-white shadow-lg duration-300 animate-in fade-in slide-in-from-top-5">
@@ -273,9 +338,10 @@ export default function ModelComparison() {
 
       <div className="flex flex-1 gap-6">
         {/* Model 1 Output */}
-        <div className="relative flex-1">
-          {!showAnimation1 ? (
-            <div className="flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
+        <div className="relative flex-1 card-container">
+          <div className={`card ${showAnimation1 ? 'flipped' : ''}`}>
+            {/* Front face - Model details */}
+            <div className="card-face flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
               <div className="flex-1 space-y-6">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
@@ -300,14 +366,14 @@ export default function ModelComparison() {
                   <div className="flex items-center gap-2">
                     <button
                       className="rounded-full bg-blue-500/20 px-4 py-2 text-sm text-blue-400 transition-colors hover:bg-blue-500/30"
-                      onClick={() => setShowAnimation1(!showAnimation1)}
+                      onClick={() => setShowAnimation1(true)}
                     >
                       Show Animation
                     </button>
                   </div>
                 </div>
 
-                {/* Content section - Now show loading for any model when loading is active */}
+                {/* Content section */}
                 {isAppraisalLoading ? (
                   <LoadingSkeleton />
                 ) : (
@@ -383,22 +449,58 @@ export default function ModelComparison() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="flex h-full items-center justify-center rounded-xl bg-gray-800/30 p-6">
-              <NetworkAnimation
-                steps={consensusSteps}
-                currentStep={currentStep}
-                contractAddress={contractAddress}
-                tokenId={tokenId}
-              />
+            
+            {/* Back face - Animation */}
+            <div className="card-face card-back flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
+              <div className="flex-1 space-y-6">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold">Model Animation</h2>
+                    <Select value={model1} onValueChange={handleModel1Change}>
+                      <SelectTrigger className="w-60 rounded-full bg-blue-500/20 px-3 py-1 text-sm text-blue-400">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-200 text-gray-900">
+                        {AVAILABLE_MODELS.map((model) => (
+                          <SelectItem
+                            key={model.id}
+                            value={model.id}
+                            className="hover:bg-gray-300 focus:bg-gray-300"
+                          >
+                            {model.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="rounded-full bg-blue-500/20 px-4 py-2 text-sm text-blue-400 transition-colors hover:bg-blue-500/30"
+                      onClick={() => setShowAnimation1(false)}
+                    >
+                      Back to Model Details
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="flex flex-1 items-center justify-center">
+                  <NetworkAnimation
+                    steps={consensusSteps}
+                    currentStep={currentStep}
+                    contractAddress={contractAddress}
+                    tokenId={tokenId}
+                  />
+                </div>
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Model 2 Output */}
-        <div className="relative flex-1">
-          {!showAnimation2 ? (
-            <div className="flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
+        <div className="relative flex-1 card-container">
+          <div className={`card ${showAnimation2 ? 'flipped' : ''}`}>
+            {/* Front face - Model details */}
+            <div className="card-face flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
               <div className="flex-1 space-y-6">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
@@ -423,14 +525,14 @@ export default function ModelComparison() {
                   <div className="flex items-center gap-2">
                     <button
                       className="rounded-full bg-purple-500/20 px-4 py-2 text-sm text-purple-400 transition-colors hover:bg-purple-500/30"
-                      onClick={() => setShowAnimation2(!showAnimation2)}
+                      onClick={() => setShowAnimation2(true)}
                     >
                       Show Animation
                     </button>
                   </div>
                 </div>
 
-                {/* Content section - Now show loading for any model when loading is active */}
+                {/* Content section */}
                 {isAppraisalLoading ? (
                   <LoadingSkeleton />
                 ) : (
@@ -506,16 +608,51 @@ export default function ModelComparison() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="flex h-full items-center justify-center rounded-xl bg-gray-800/30 p-6">
-              <NetworkAnimation
-                steps={consensusSteps}
-                currentStep={currentStep}
-                contractAddress={contractAddress}
-                tokenId={tokenId}
-              />
+            
+            {/* Back face - Animation */}
+            <div className="card-face card-back flex h-full flex-col rounded-xl bg-gray-800/30 p-6">
+              <div className="flex-1 space-y-6">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold">Model Animation</h2>
+                    <Select value={model2} onValueChange={handleModel2Change}>
+                      <SelectTrigger className="w-60 rounded-full bg-purple-500/20 px-3 py-1 text-sm text-purple-400">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-200 text-gray-900">
+                        {AVAILABLE_MODELS.map((model) => (
+                          <SelectItem
+                            key={model.id}
+                            value={model.id}
+                            className="hover:bg-gray-300 focus:bg-gray-300"
+                          >
+                            {model.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="rounded-full bg-purple-500/20 px-4 py-2 text-sm text-purple-400 transition-colors hover:bg-purple-500/30"
+                      onClick={() => setShowAnimation2(false)}
+                    >
+                      Back to Model Details
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="flex flex-1 items-center justify-center">
+                  <NetworkAnimation
+                    steps={consensusSteps}
+                    currentStep={currentStep}
+                    contractAddress={contractAddress}
+                    tokenId={tokenId}
+                  />
+                </div>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

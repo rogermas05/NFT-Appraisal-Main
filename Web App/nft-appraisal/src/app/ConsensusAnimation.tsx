@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Node = {
   id: string;
@@ -47,6 +47,9 @@ export function NetworkAnimation({
   contractAddress,
   tokenId,
 }: NetworkAnimationProps) {
+  // Add a ref to track if we've already applied the final state
+  const finalStateAppliedRef = useRef(false);
+  
   // State for nodes and connections
   const [nodes, setNodes] = useState<Node[]>([
     // Three LLM nodes on top
@@ -104,6 +107,7 @@ export function NetworkAnimation({
     setLogs([]);
     setStats({});
     setCurrentStage("connecting");
+    finalStateAppliedRef.current = false;
 
     // Close any existing connection
     if (eventSourceRef.current) {
@@ -145,9 +149,14 @@ export function NetworkAnimation({
         setCurrentStage(stageName);
         addLog(`Stage: ${description || stageName}`, "info");
 
+        // Skip visual updates if final state has been applied
+        if (finalStateAppliedRef.current) {
+          return;
+        }
+
         // Update node activation based on stage
         if (stageName.includes("query") || stageName === "initial_round") {
-          // Activate LLM nodes during querying
+          // Activate LLM nodes during querying, deactivate aggregator
           setNodes((nodes) =>
             nodes.map((node) => ({
               ...node,
@@ -158,24 +167,29 @@ export function NetworkAnimation({
             conns.map((conn) => ({ ...conn, active: false })),
           );
         } else if (
-          stageName.includes("aggregat") ||
-          stageName === "improvement_round"
+          stageName.includes("aggregat")
         ) {
-          // Activate aggregator and connections during aggregation
+          // Activate only aggregator node during aggregation, deactivate LLMs
           setNodes((nodes) =>
             nodes.map((node) => ({
               ...node,
               active: node.id === "aggregator",
             })),
           );
+          // Keep connections inactive during aggregation
           setConnections((conns) =>
-            conns.map((conn) => ({ ...conn, active: true })),
+            conns.map((conn) => ({ ...conn, active: false })),
           );
-        } else if (stageName === "complete") {
-          // Activate all nodes and connections when complete
-          setNodes((nodes) => nodes.map((node) => ({ ...node, active: true })));
+        } else if (stageName === "improvement_round") {
+          // Activate LLM nodes during improvement round, deactivate aggregator
+          setNodes((nodes) =>
+            nodes.map((node) => ({
+              ...node,
+              active: node.id.startsWith("llm"),
+            })),
+          );
           setConnections((conns) =>
-            conns.map((conn) => ({ ...conn, active: true })),
+            conns.map((conn) => ({ ...conn, active: false })),
           );
         }
       } catch (e) {
@@ -302,6 +316,7 @@ export function NetworkAnimation({
         const data = JSON.parse((event as MessageEvent).data);
         const result = data.data || {};
 
+        // Update stats without triggering a re-render of the nodes
         setStats((prev) => ({
           ...prev,
           finalResult: result,
@@ -311,6 +326,18 @@ export function NetworkAnimation({
           `Appraisal complete: $${result.price?.toFixed(2) || "unknown"}`,
           "success",
         );
+        
+        // Apply the final visual state only once
+        if (!finalStateAppliedRef.current) {
+          finalStateAppliedRef.current = true;
+          
+          // Use requestAnimationFrame to ensure smooth transition
+          requestAnimationFrame(() => {
+            // Activate all nodes and connections for the final state
+            setNodes((nodes) => nodes.map((node) => ({ ...node, active: true })));
+            setConnections((conns) => conns.map((conn) => ({ ...conn, active: true })));
+          });
+        }
       } catch (e) {
         console.error("Error parsing final_result event:", e);
       }
@@ -351,6 +378,8 @@ export function NetworkAnimation({
     // Handle process end
     eventSource.addEventListener("process_end", (event) => {
       addLog("Process completed", "success");
+      
+      // Close the connection without modifying the visual state
       eventSource.close();
       eventSourceRef.current = null;
     });
@@ -367,7 +396,12 @@ export function NetworkAnimation({
     <div className="flex h-full w-full flex-col gap-4">
       {/* Animation */}
       <div className="flex flex-1 items-center justify-center">
-        <svg width="300" height="300" className="rounded-lg bg-gray-900/50">
+        <svg 
+          width="300" 
+          height="300" 
+          className="rounded-lg bg-gray-900/50"
+          style={{ willChange: 'transform' }} // Add this to improve rendering performance
+        >
           {/* Draw connections */}
           {connections.map((conn) => {
             const fromNode = nodes.find((n) => n.id === conn.from)!;
@@ -381,7 +415,7 @@ export function NetworkAnimation({
                   y2={toNode.y}
                   stroke={conn.active ? "#8B5CF6" : "#374151"}
                   strokeWidth="2"
-                  className="transition-colors duration-300"
+                  className="transition-colors duration-500" // Increase duration for smoother transitions
                 />
                 {conn.value && (
                   <text
@@ -406,7 +440,7 @@ export function NetworkAnimation({
                 cy={node.y}
                 r="20"
                 fill={node.active ? "#8B5CF6" : "#374151"}
-                className="transition-colors duration-300"
+                className="transition-colors duration-500" // Increase duration for smoother transitions
               />
               <text
                 x={node.x}
