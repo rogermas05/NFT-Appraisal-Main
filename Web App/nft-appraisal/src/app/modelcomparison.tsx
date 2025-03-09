@@ -10,14 +10,13 @@ import {
 } from "../components/ui/select"
 import type { ConsensusStep } from "./ConsensusAnimation"
 import { defaultConsensusSteps, NetworkAnimation } from "./ConsensusAnimation"
+import { useNFTData } from './NftDataContext'
 
 // Available models for selection
 const AVAILABLE_MODELS = [
   { id: "regression", name: "Centralized Aggregator" },
-  { id: "neural", name: "Neural Network" },
-  { id: "random_forest", name: "Random Forest" },
-  { id: "ensemble", name: "Ensemble Model" },
-  { id: "transformer", name: "Transformer Model" },
+  { id: "confidence", name: "Confidence Adjusted Aggregator" },
+  { id: "singular", name: "Singular Model Approach" },
 ] as const
 
 type ModelId = typeof AVAILABLE_MODELS[number]["id"]
@@ -29,6 +28,45 @@ export default function ModelComparison() {
   const [showAnimation2, setShowAnimation2] = useState(false)
   const [currentStep, setCurrentStep] = useState(0);
   const [consensusSteps, setConsensusSteps] = useState<ConsensusStep[]>(defaultConsensusSteps);
+  const { nftData, isAppraisalLoading } = useNFTData();
+
+  // Get appraisal data for the centralized aggregator model
+  const appraisalData = nftData?.appraisalData;
+  
+  // Calculate confidence percentage
+  const confidencePercentage = appraisalData ? 
+    Math.round(appraisalData.total_confidence * 100) : 
+    0;
+
+  // Loading skeleton component
+  const LoadingSkeleton = () => (
+    <>
+      {/* Price Prediction Skeleton */}
+      <div className="bg-gray-800/50 rounded-lg p-6">
+        <p className="text-sm text-gray-400 mb-2">Estimated Value</p>
+        <div className="h-9 bg-gray-700 rounded-md animate-pulse w-2/3"></div>
+      </div>
+
+      {/* Confidence Score Skeleton */}
+      <div className="bg-gray-800/50 rounded-lg p-6">
+        <p className="text-sm text-gray-400 mb-2">Confidence Score</p>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-3 bg-gray-700 rounded-full animate-pulse"></div>
+          <div className="h-5 w-10 bg-gray-700 rounded-md animate-pulse"></div>
+        </div>
+      </div>
+
+      {/* Explanation Text Skeleton */}
+      <div className="bg-gray-800/50 rounded-lg p-6">
+        <p className="text-sm text-gray-400 mb-2">Model Explanation</p>
+        <div className="space-y-2">
+          <div className="h-4 bg-gray-700 rounded-md animate-pulse w-full"></div>
+          <div className="h-4 bg-gray-700 rounded-md animate-pulse w-5/6"></div>
+          <div className="h-4 bg-gray-700 rounded-md animate-pulse w-4/6"></div>
+        </div>
+      </div>
+    </>
+  );
 
   // Remove the old useEffect and keep only the animation content
   const animationContent = (
@@ -91,22 +129,51 @@ export default function ModelComparison() {
 
               {!showAnimation1 ? (
                 <>
-                  {/* Price Prediction */}
-                  <div className="bg-gray-800/50 rounded-lg p-6">
-                    <p className="text-sm text-gray-400 mb-2">Estimated Value</p>
-                    <p className="text-3xl font-bold text-blue-400">0.00 ETH</p>
-                  </div>
-
-                  {/* Confidence Score */}
-                  <div className="bg-gray-800/50 rounded-lg p-6">
-                    <p className="text-sm text-gray-400 mb-2">Confidence Score</p>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-3 bg-gray-700 rounded-full">
-                        <div className="h-full w-0 bg-blue-500 rounded-full"></div>
+                  {model1 === "regression" && isAppraisalLoading ? (
+                    <LoadingSkeleton />
+                  ) : (
+                    <>
+                      {/* Price Prediction - Updated format */}
+                      <div className="bg-gray-800/50 rounded-lg p-6">
+                        <p className="text-sm text-gray-400 mb-2">Estimated Value</p>
+                        <p className="text-3xl font-bold text-blue-400">
+                          {model1 === "regression" && appraisalData ? 
+                            `${appraisalData.ethereum_price_usd.toFixed(2)} ETH ($${appraisalData.price.toFixed(2)})` : 
+                            "$0.00"}
+                        </p>
                       </div>
-                      <span className="text-sm font-medium">0%</span>
-                    </div>
-                  </div>
+
+                      {/* Confidence Score */}
+                      <div className="bg-gray-800/50 rounded-lg p-6">
+                        <p className="text-sm text-gray-400 mb-2">Confidence Score</p>
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 h-3 bg-gray-700 rounded-full">
+                            <div 
+                              className="h-full bg-blue-500 rounded-full"
+                              style={{ 
+                                width: model1 === "regression" && appraisalData ? 
+                                  `${confidencePercentage}%` : 
+                                  "0%" 
+                              }}
+                            ></div>
+                          </div>
+                          <span className="text-sm font-medium">
+                            {model1 === "regression" && appraisalData ? 
+                              `${confidencePercentage}%` : 
+                              "0%"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Explanation Text - Only show if we have appraisal data */}
+                      {model1 === "regression" && appraisalData && (
+                        <div className="bg-gray-800/50 rounded-lg p-6">
+                          <p className="text-sm text-gray-400 mb-2">Model Explanation</p>
+                          <p className="text-sm text-gray-200">{appraisalData.text}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </>
               ) : (
                 animationContent

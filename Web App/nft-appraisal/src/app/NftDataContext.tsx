@@ -7,6 +7,13 @@ interface NFTData {
   owner: string;
   lastSalePrice: string;
   imageUrl?: string;
+  appraisalData?: {
+    price: number;
+    text: string;
+    standard_deviation: number;
+    total_confidence: number;
+    ethereum_price_usd: number;
+  };
 }
 
 interface NFTDataContextType {
@@ -14,6 +21,8 @@ interface NFTDataContextType {
   setNftData: (data: NFTData | null) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
+  isAppraisalLoading: boolean;
+  setIsAppraisalLoading: (loading: boolean) => void;
 }
 
 const NFTDataContext = createContext<NFTDataContextType | undefined>(undefined);
@@ -21,9 +30,17 @@ const NFTDataContext = createContext<NFTDataContextType | undefined>(undefined);
 export function NFTDataProvider({ children }: { children: ReactNode }) {
   const [nftData, setNftData] = useState<NFTData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAppraisalLoading, setIsAppraisalLoading] = useState(false);
 
   return (
-    <NFTDataContext.Provider value={{ nftData, setNftData, isLoading, setIsLoading }}>
+    <NFTDataContext.Provider value={{ 
+      nftData, 
+      setNftData, 
+      isLoading, 
+      setIsLoading,
+      isAppraisalLoading,
+      setIsAppraisalLoading
+    }}>
       {children}
     </NFTDataContext.Provider>
   );
