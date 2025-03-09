@@ -247,6 +247,17 @@ async def run_consensus_with_data(
 async def fetch_nft_data(contract_address: str, token_id: str):
     """Fetch NFT metadata using the main function from sideinfo.py"""
     # Import the main function from sideinfo.py
+    import sys
+    import os
+    
+    # Get the current file's directory and add parent directories to path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(os.path.dirname(current_dir))
+    
+    if parent_dir not in sys.path:
+        sys.path.append(parent_dir)
+    
+    # Now import using relative path
     from Backend.AI.Sideinfo_api.sideinfo import main
     
     # Call the main function directly
