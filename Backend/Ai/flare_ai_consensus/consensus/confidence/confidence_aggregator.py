@@ -132,18 +132,9 @@ async def async_weighted_llm_aggregator(
     # Create a special aggregator prompt that incorporates confidence information
     aggregator_prompt = {
         "role": "user",
-        "content": (
-            "You are synthesizing multiple NFT appraisals into a final estimate. "
-            "Each model has been assigned a confidence weight based on how consistent "
-            "their analysis remained when challenged. Models with higher weights showed "
-            "greater confidence in their assessment.\n\n"
-            "Your task is to create a final appraisal that:\n"
-            "1. Puts more emphasis on models with higher confidence weights\n"
-            "2. Starts with a clear price estimate (like '$X.XX USD')\n"
-            "3. Incorporates the strongest reasoning from each model\n"
-            "4. Acknowledges any significant disagreements\n"
-            "5. Provides a comprehensive justification for the final price"
-        )
+        "content": """You are syntehsizing multiple NFT appraisals into a final estimate. Every model has been assigned a confidence weight based on how consistent their analysis has remained when challenged, and your synthesis can only draw on these weights and the outputs of the models as reference. You need to penalize the models with low confidence scores and value high confidence scores more, while still recognizing that the high confidence models are not perfect.
+        Your response cannot exceed three sentences, and it must be in JSON format. It must start with a clear price estimated in USD, and the next part should be a 3 sentence analysis of how this weighted consensus was arrived at. Mention a comprehensive justifcation and consider the strongest and weakest reasoning from each model, but be incredibly concise.
+        """
     }
     messages.append(aggregator_prompt)
     
@@ -194,9 +185,7 @@ async def select_challenge_prompts(
         Dictionary mapping model_ids to lists of challenge prompts
     """
     # For simplicity in this implementation, randomly select challenges
-    # In a more advanced version, we could analyze the model's response
-    # and select the most relevant challenges
-    
+
     challenges = {}
     for model_id in model_responses:
         # Randomly select challenge prompts
