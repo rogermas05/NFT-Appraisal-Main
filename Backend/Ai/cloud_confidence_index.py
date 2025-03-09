@@ -8,6 +8,7 @@ from pathlib import Path
 import textwrap
 import time
 import structlog
+from datetime import datetime
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
 from flare_ai_consensus.settings import Settings, Message
@@ -26,6 +27,21 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+
+ACCURACY_METRIC_DESIRED = True
+
+# Parse data to compare accuracy
+def accuracy_preparation(json_data):
+    if json_data["sales_history"]:
+        most_recent_transaction = json_data["sales_history"].pop(0)  # Removes and stores the first (latest) entry
+        formatted_date = datetime.strptime(most_recent_transaction["date"], "%Y-%m-%d %H:%M:%S").strftime("%B, %Y")
+    
+    return most_recent_transaction["price_usd"], formatted_date, json_data
+
+if ACCURACY_METRIC_DESIRED:
+    ACTUAL_VALUE, DATE_TO_PREDICT, sample_data = accuracy_preparation(sample_data)
+
+
 # Configure structlog for better formatting
 structlog.configure(
     processors=[
@@ -38,15 +54,11 @@ logger = structlog.get_logger()
 
 # Improved challenge prompts that encourage refinement rather than radical changes
 CHALLENGE_PROMPTS = [
-    "Based on your analysis, could you refine your price estimate? Please consider both bullish and bearish market scenarios, focusing on the most recent sales data.",
+    "Based on your analysis, evaluate whether you need to refine your price estimate. Consider a variety of market scenarios and use the data to identify what price estimate is most appropriate.",
     
-    "Could you revisit your price estimate, taking into account the NFT's rarity rank and recent sales patterns? A slightly more detailed analysis would be helpful.",
+    "Your price estimate might be unreasonable, could you provide a more nuanced analysis to support your estimate? Alternatively, you may wish to change your estimate.",
     
-    "Your price estimate seems reasonable, but could you provide a more nuanced analysis that considers potential market fluctuations? Please maintain a focus on recent transaction data.",
-    
-    "What factors might cause your price estimate to change in either direction? Please reconsider your valuation with these factors in mind.",
-    
-    "Recent market trends suggest some volatility in NFT valuations. Could you refine your estimate considering both optimistic and conservative scenarios?"
+    "What factors might you have missed out on? Please reconsider your valuation with these factors in mind."
 ]
 
 def print_colored(text, color=None):
@@ -264,24 +276,17 @@ async def send_challenge_round(provider, consensus_config, initial_conversation,
         
         # Get the model's original response and extract price
         original_response = initial_responses.get(model_id, "")
-        original_price, _ = properly_extract_json_price(original_response)
-        
-        # If price couldn't be extracted, try the fallback method
-        if original_price is None:
-            tmp_price, _ = extract_price_and_explanation(original_response)
-            original_price = tmp_price
-        
-        price_str = f"${original_price:.2f}" if original_price is not None else "unknown"
         
         # Create contextual challenge prompt that includes original response
         contextualized_prompt = f"""
-        Your previous price estimate was {price_str}.
+        Your previous price estimation analysis was was {original_response}.
 
         {challenge_prompt}
 
-        
         Remember to maintain the same JSON format with 'price' and 'explanation' fields.
         """
+        
+        print(contextualized_prompt)
         
         # Build conversation with challenge
         conversation = initial_conversation.copy()
@@ -296,31 +301,31 @@ async def send_challenge_round(provider, consensus_config, initial_conversation,
         }
         
         # Send request and immediately show response (no concurrent processing)
-        # try:
-        #     print_colored(f"Waiting for {model_id} to respond...", "blue")
-        #     response = await provider.send_chat_completion(payload)
-        #     text = response.get("choices", [])[0].get("message", {}).get("content", "")
-        #     challenge_responses[model_id] = text
+        try:
+            print_colored(f"Waiting for {model_id} to respond...", "blue")
+            response = await provider.send_chat_completion(payload)
+            text = response.get("choices", [])[0].get("message", {}).get("content", "")
+            challenge_responses[model_id] = text
             
-        #     # Immediately display this model's response
-        #     print_colored(f"\n----- Response from {model_id} -----", "green")
+            # Immediately display this model's response
+            print_colored(f"\n----- Response from {model_id} -----", "green")
             
-        #     # Extract price and explanation
-        #     price, explanation = properly_extract_json_price(text)
-        #     if price is not None:
-        #         print_colored(f"Extracted price: ${price:.2f}", "cyan")
+            # Extract price and explanation
+            price, explanation = properly_extract_json_price(text)
+            if price is not None:
+                print_colored(f"Extracted price: ${price:.2f}", "cyan")
             
-        #     # Show truncated response
-        #     max_preview_chars = 500
-        #     preview = text if len(text) <= max_preview_chars else text[:max_preview_chars] + "..."
-        #     print(preview)
-        #     print_colored("-" * 40, "green")
+            # Show truncated response
+            max_preview_chars = 500
+            preview = text if len(text) <= max_preview_chars else text[:max_preview_chars] + "..."
+            print(preview)
+            print_colored("-" * 40, "green")
             
-        # except Exception as e:
-        #     logger.error(f"Error getting challenge response from {model_id}: {e}")
-        #     error_msg = f"Error: {str(e)}"
-        #     challenge_responses[model_id] = error_msg
-        #     print_colored(f"Error getting response from {model_id}: {e}", "red")
+        except Exception as e:
+            logger.error(f"Error getting challenge response from {model_id}: {e}")
+            error_msg = f"Error: {str(e)}"
+            challenge_responses[model_id] = error_msg
+            print_colored(f"Error getting response from {model_id}: {e}", "red")
     
     return challenge_responses
 
@@ -364,11 +369,11 @@ async def analyze_model_responses(initial_responses, challenge_responses):
         elif initial_price == 0:
             price_change = 0.8  # Cap at 80% for maximum change
         else:
-            # Calculate relative price change with softening function
-            relative_change = abs(challenge_price - initial_price) / max(initial_price, 1)
-            # Apply a square root transformation to reduce impact of large changes
-            # Cap at 80% to prevent extreme penalties
-            price_change = min(0.8, math.sqrt(min(1, relative_change)))
+            # Calculate relative price change
+            price_change = min(abs(challenge_price - initial_price) / initial_price, 1)
+            
+            
+     
             
         # Calculate price stability (inverse of price change)
         price_stability = 1 - price_change
@@ -398,7 +403,7 @@ async def analyze_model_responses(initial_responses, challenge_responses):
         print_colored(f"Initial price: ${initial_price:.2f}", "cyan")
         print_colored(f"Challenge price: ${challenge_price:.2f}", "cyan")
         print_colored(f"Raw change: {abs(challenge_price - initial_price) / max(initial_price, 1):.2%}", "cyan")
-        print_colored(f"Softened price change: {price_change:.2%}", "magenta")
+        print_colored(f"Price change: {price_change:.2%}", "magenta")
         print_colored(f"Price stability: {price_stability:.4f}", "magenta")
         print_colored(f"Text similarity: {text_similarity:.4f}", "magenta")
         print_colored(f"Formula: 0.3 * {text_similarity:.4f} + 0.7 * {price_stability:.4f} = {confidence_score:.4f}", "blue")
@@ -408,7 +413,10 @@ async def analyze_model_responses(initial_responses, challenge_responses):
 
 
 async def weighted_aggregation(provider, aggregator_config, model_responses, analysis):
-    """Perform weighted aggregation based on confidence scores"""
+    """
+    Provide aggregator model with confidence scores and let it determine the final price.
+    We don't calculate a weighted average ourselves, but instead pass the weights to the model.
+    """
     # Calculate weights based on confidence scores
     confidence_scores = {model_id: data["confidence_score"] for model_id, data in analysis.items()}
     
@@ -434,34 +442,10 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
         print_colored(f"Applied correction factor: {correction_factor}", "yellow")
         print_colored(f"New weight sum: {sum(weights.values()):.6f}", "blue")
     
-    # Calculate price statistics
+    # Calculate standard statistics for informational purposes only
     prices = [analysis[model_id]["challenge_price"] for model_id in analysis]
-    
-    # Handle outliers by removing extreme values
-    if len(prices) >= 3:
-        # Sort prices
-        sorted_prices = sorted(prices)
-        # Calculate Q1 and Q3
-        q1_index = len(sorted_prices) // 4
-        q3_index = 3 * len(sorted_prices) // 4
-        q1 = sorted_prices[q1_index]
-        q3 = sorted_prices[q3_index]
-        # Calculate IQR and bounds
-        iqr = q3 - q1
-        lower_bound = q1 - 1.5 * iqr
-        upper_bound = q3 + 1.5 * iqr
-        # Filter out outliers
-        filtered_prices = [p for p in prices if lower_bound <= p <= upper_bound]
-        
-        if filtered_prices:
-            print_colored(f"Removed {len(prices) - len(filtered_prices)} outliers", "yellow")
-            prices = filtered_prices
-    
-    # Only calculate if we have valid prices
     if prices:
-        # Filter out None or zero values
         valid_prices = [p for p in prices if p is not None and p > 0]
-        
         if valid_prices:
             mean_price = statistics.mean(valid_prices)
             median_price = statistics.median(valid_prices)
@@ -474,27 +458,18 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
         mean_price = 0
         median_price = 0
         std_dev = 0
-    
-    # Calculate weighted price - use challenge prices
-    weighted_price = 0
-    for model_id, weight in weights.items():
-        if model_id in analysis:
-            price = analysis[model_id]["challenge_price"]
-            if price is not None:
-                weighted_price += price * weight
+        
     
     # Log the normalized weights and prices
-    print_colored("\nWeighted Calculation Details:", "cyan")
+    print_colored("\nModel Weights and Prices:", "cyan")
     for model_id, weight in weights.items():
         if model_id in analysis:
             price = analysis[model_id]["challenge_price"]
-            weighted_contribution = price * weight
             print_colored(f"Model: {model_id}", "cyan")
-            print_colored(f"- Weight: {weight:.4f}", "blue")
+            print_colored(f"- Weight: {weight:.4f}", "blue") 
             print_colored(f"- Price: ${price:.2f}", "blue")
-            print_colored(f"- Weighted Contribution: ${weighted_contribution:.2f}", "green")
     
-    print_colored(f"\nWeighted price: ${weighted_price:.2f}", "green")
+    print_colored(f"\nStatistics (for information only):", "cyan")
     print_colored(f"Mean price: ${mean_price:.2f}", "cyan")
     print_colored(f"Median price: ${median_price:.2f}", "cyan")
     print_colored(f"Standard deviation: ${std_dev:.2f}", "cyan")
@@ -518,11 +493,9 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
     system_message = {
         "role": "system", 
         "content": (
-            f"Aggregated responses from multiple models with confidence-based weights:\n\n"
-            f"Weighted price: ${weighted_price:.2f}\n"
-            f"Mean price: ${mean_price:.2f}\n"
-            f"Median price: ${median_price:.2f}\n"
-            f"Standard deviation: ${std_dev:.2f}\n\n"
+            f"You are synthesizing multiple NFT appraisals from different models. Each model has been assigned a confidence weight based on how consistent their analysis remained when challenged.\n\n"
+            f"A higher weight means the model's response should be given more consideration in your final synthesis.\n\n"
+            f"Here are the model responses with their confidence weights:\n\n"
             f"{weighted_text}"
         )
     }
@@ -531,30 +504,25 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
     # Add aggregator prompt with explicit JSON structure requirement
     aggregator_prompt = {
         "role": "user",
-        "content": """You are synthesizing multiple NFT appraisals into a final estimate. Every model has been assigned a confidence weight based on how consistent their analysis has remained when challenged.
+        "content": """Based on the model responses and their assigned confidence weights, provide your final appraisal of the NFT's value.
 
-Your response MUST be in JSON format with the following structure (exactly matching this format):
+Your response MUST be in JSON format with the following structure:
 {
   "price": [Final price in USD as a number],
-  "explanation": "[Brief explanation in 2-3 sentences]",
-  "standard_deviation": [Standard deviation value],
-  "models": {
-    "[model_name_1]": {
-      "text_similarity": [similarity score],
-      "price_change": [price change percentage],
-      "weight": [calculated weight]
-    },
-    "[model_name_2]": {
-      "text_similarity": [similarity score],
-      "price_change": [price change percentage],
-      "weight": [calculated weight]
-    }
-  }
+  "explanation": "[Brief explanation in 2-3 sentences]"
 }
 
-Do not include any other text outside this JSON structure. Do not include markdown code blocks. Your entire response should be just a valid JSON object.
-Use the weights to determine each model's contribution, giving more weight to models with higher confidence scores. The final price should reflect the weighted average of the model prices.
-        """
+Important guidelines:
+1. Instead, use your expertise to determine the most reasonable price based on:
+   - The quality of each model's reasoning
+   - The confidence weights assigned to each model
+   - Recent sales data emphasized in the responses
+   - The NFT's rarity and market trends
+2. Your price should reflect your best judgment of the true value, informed by the weighted model responses
+3. Your explanation should be concise but informative
+
+Do not include any text outside the JSON structure or any markdown code blocks.
+"""
     }
     messages.append(aggregator_prompt)
     
@@ -579,33 +547,54 @@ Use the weights to determine each model's contribution, giving more weight to mo
         aggregated_text = re.sub(r'\s*```$', '', aggregated_text)
     aggregated_text = aggregated_text.strip()
     
-    # Try to parse the JSON
+    # Try to parse the JSON to validate it
     try:
         result_json = json.loads(aggregated_text)
         
-        # Ensure proper structure
-        if "models" not in result_json:
-            result_json["models"] = {}
-            
-        # Make sure all models are included with correct data
-        for model_id, data in analysis.items():
-            if model_id not in result_json["models"]:
-                result_json["models"][model_id] = {}
-                
-            # Update model data
-            result_json["models"][model_id]["text_similarity"] = data["text_similarity"]
-            result_json["models"][model_id]["price_change"] = data["price_change"]
-            result_json["models"][model_id]["weight"] = weights[model_id]
+        # Ensure we have the basic required fields
+        if "price" not in result_json:
+            result_json["price"] = median_price  # Use median as a fallback
         
-        # Add standard deviation if missing
-        if "standard_deviation" not in result_json:
-            result_json["standard_deviation"] = std_dev
+        if "explanation" not in result_json:
+            result_json["explanation"] = "Final price estimate based on weighted model contributions."
             
-        # Override price with our calculated weighted price
-        result_json["price"] = weighted_price
+        # Add our calculated statistics and model data
+        result_json["standard_deviation"] = std_dev
+        result_json["models"] = {}
+        
+        predicted_price = result_json["price"]
+        error_accuracy = abs((ACTUAL_VALUE - predicted_price)) / ACTUAL_VALUE
+        accuracy = 1 - error_accuracy
+        
+        print_colored(f"Predicted Price: ${predicted_price:.2f}", "green")
+        print_colored(f"Actual Price: ${ACTUAL_VALUE:.2f}", "green")
+        print_colored(f"Accuracy: {accuracy:.2%}", "green")
+        
+        result_json["accuracy"] = accuracy
+        
+        for model_id, data in analysis.items():
+            result_json["models"][model_id] = {
+                "text_similarity": data["text_similarity"],
+                "price_change": data["price_change"],
+                "weight": weights[model_id]
+            }
+            
+        # Add Final Confidence score and Standard Deviation of Weights
+        weights = [weights.get(model_id, 0) for model_id in analysis]
+        print("WEIGHTS: ", weights)
+        
+        if weights and len(weights) > 1:
+            weights_std_dev = statistics.stdev(weights)
+            cv = weights_std_dev / (sum(weights) / len(weights) )
+            confidence = 1.0 - min(cv, 1.0)
+            final_confidence = max(0.1, min(0.9, confidence))
+        
+            result_json["final_confidence_score"] = final_confidence
+            result_json["weights_standard_deviation"] = weights_std_dev
             
         # Convert back to JSON string
         aggregated_text = json.dumps(result_json, indent=2)
+        
     except json.JSONDecodeError as e:
         print_colored(f"Error parsing aggregator response as JSON: {e}", "red")
         print_colored("Creating fallback JSON output", "yellow")
@@ -620,8 +609,8 @@ Use the weights to determine each model's contribution, giving more weight to mo
             }
             
         result_json = {
-            "price": weighted_price,
-            "explanation": f"Final price estimate of ${weighted_price:.2f} based on weighted model contributions. Higher weights were given to models with greater consistency between initial and challenged responses.",
+            "price": median_price,  # Use median as a reasonable fallback
+            "explanation": "Final price estimate based on analysis of model responses, with higher weight given to more consistent models.",
             "standard_deviation": std_dev,
             "models": models_json
         }
@@ -664,11 +653,9 @@ async def main():
     # Patch the provider for better logging
     provider = await patch_provider_for_logging(provider)
     
+    
     # Define the NFT appraisal conversation
-    nft_appraisal_conversation = [
-        {
-            "role": "system",
-            "content": """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this specific date, which is March, 2025. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST be in JSON format starting with a single value of price in USD, followed by a detailed explanation of your reasoning.
+    content_prompt = """You are an expert at conducting NFT appraisals, and your goal is to output the price in USD value of the NFT at this specific date, which is $$$$$$. You will be given pricing history and other metadata about the NFT and will have to extrapolate and analyze the trends from the data. Your response MUST be in JSON format starting with a single value of price in USD, followed by a detailed explanation of your reasoning.
 
             The sample data that you will be given will be in this input format, although the values will be different. Use it to understand how the data is laid out and what each entry means. Your analysis and appraisal should be more nuanced, smart, and data-driven than the example. 
             
@@ -713,6 +700,11 @@ async def main():
             }
             
             """
+    
+    nft_appraisal_conversation = [
+        {
+            "role": "system",
+            "content": content_prompt.replace("$$$$$$", DATE_TO_PREDICT, 1)
             },
         {
             "role": "user",
@@ -793,6 +785,7 @@ async def main():
             f.write(final_consensus)
         
         print_colored(f"\nSaved consensus result to {results_file}", "green")
+        
         
     except Exception as e:
         print_colored(f"Error during consensus process: {e}", "red")
