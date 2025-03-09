@@ -7,15 +7,15 @@ import random
 import statistics
 from pathlib import Path
 import textwrap
+import aiohttp
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
-from flare_ai_consensus.consensus import run_consensus, send_round
+from flare_ai_consensus.consensus import send_round
+from flare_ai_consensus.consensus.aggregator import async_centralized_llm_aggregator
 from flare_ai_consensus.settings import Settings, Message
 from flare_ai_consensus.utils import load_json, parse_chat_response
 
-from sample import sample_data
 from dotenv import load_dotenv
-
 
 load_dotenv()
 
@@ -133,49 +133,100 @@ async def patch_provider_for_logging(provider):
     return provider
 
 
-async def get_final_responses(provider, consensus_config, initial_conversation, aggregated_response):
-    """Get final responses from all models after seeing the consensus"""
-    improved_responses = {}
+async def run_consensus_with_data(
+    provider, 
+    consensus_config, 
+    initial_conversation
+):
+    """
+    Run consensus process and return both final result and all responses data.
+    Modified version of the built-in run_consensus function to return all intermediate data.
     
-    # Build the improvement conversation
-    conversation = initial_conversation.copy()
+    Args:
+        provider: An instance of AsyncOpenRouterProvider
+        consensus_config: Configuration for the consensus process
+        initial_conversation: Initial prompt messages
+        
+    Returns:
+        tuple: (final_consensus_result, all_response_data)
+    """
+    # Dictionary to store all responses and aggregations
+    response_data = {}
+    response_data["initial_conversation"] = initial_conversation
+
+    # Step 1: Initial round
+    print_colored("Running initial round of consensus...", "blue")
+    responses = await send_round(
+        provider, consensus_config, response_data["initial_conversation"]
+    )
     
-    # Add aggregated response
-    conversation.append({
-        "role": consensus_config.aggregated_prompt_type,
-        "content": f"Consensus: {aggregated_response}",
-    })
-    
-    # Add new prompt as "user" message
-    conversation.append({
-        "role": "user", 
-        "content": consensus_config.improvement_prompt,
-    })
-    
-    # Request from each model
-    for model in consensus_config.models:
-        try:
-            # Create payload
-            payload = {
-                "model": model.model_id,
-                "messages": conversation,
-                "max_tokens": model.max_tokens,
-                "temperature": model.temperature,
-            }
-            
-            # Get response
-            response = await provider.send_chat_completion(payload)
-            text = parse_chat_response(response)
-            improved_responses[model.model_id] = text
-            print_colored(f"Received improved response from {model.model_id}", "green")
-            
-        except Exception as e:
-            print_colored(f"Error getting improved response from {model.model_id}: {e}", "red")
-    
-    return improved_responses
+    aggregated_response = await async_centralized_llm_aggregator(
+        provider, consensus_config.aggregator_config, responses
+    )
+    print_colored("Initial aggregation complete", "blue")
+
+    response_data["iteration_0"] = responses
+    response_data["aggregate_0"] = aggregated_response
+
+    # Step 2: Improvement rounds
+    for i in range(consensus_config.iterations):
+        print_colored(f"Running improvement round {i+1}...", "blue")
+        responses = await send_round(
+            provider, consensus_config, initial_conversation, aggregated_response
+        )
+        
+        aggregated_response = await async_centralized_llm_aggregator(
+            provider, consensus_config.aggregator_config, responses
+        )
+        print_colored(f"Improvement round {i+1} complete", "blue")
+
+        response_data[f"iteration_{i + 1}"] = responses
+        response_data[f"aggregate_{i + 1}"] = aggregated_response
+
+    # Return both the final consensus and all response data
+    return aggregated_response, response_data
 
 
-async def main():
+async def fetch_nft_data(contract_address: str, token_id: str):
+    """Fetch NFT metadata from the API endpoint"""
+    url = "https://get-nft-data-dkwdhhyv7q-uc.a.run.app"
+    params = {
+        "contract_address": contract_address,
+        "token_id": token_id
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as response:
+            if response.status != 200:
+                raise Exception(f"API request failed with status {response.status}")
+            return await response.json()
+
+
+async def fetch_ethereum_price():
+    """Fetch current Ethereum price in USD from CoinGecko API"""
+    url = "https://api.coingecko.com/api/v3/simple/price"
+    params = {
+        "ids": "ethereum",
+        "vs_currencies": "usd"
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as response:
+            if response.status != 200:
+                raise Exception(f"CoinGecko API request failed with status {response.status}")
+            data = await response.json()
+            return data["ethereum"]["usd"]
+
+
+async def process_nft_appraisal(contract_address: str, token_id: str):
+    """Main processing function for NFT appraisal"""
+    print_colored("Fetching NFT data...", "blue")
+    
+    # Fetch NFT data
+    metadata_data = await fetch_nft_data(contract_address, token_id)
+    
+    print_colored("Preparing models...", "blue")
+    
     # Load API key from environment variable
     api_key = os.environ.get("OPEN_ROUTER_API_KEY", "")
     if not api_key:
@@ -232,7 +283,7 @@ async def main():
                     "aggregator_prompt": [
                         {
                             "role": "user",
-                            "content": """You have been provided with responses from various models to the latest query. Synthesize these responses into a single, high-quality answer. If the models disagree on any point, note this and explain the different perspectives. Your response should be well-structured, comprehensive, and accurate. Your response should be in JSON format like the models, and start with a SINGLE VALUE USD prediction of the NFT Price. Then there will be an explanation component where you will conduct your thorough discussion. Ensure that you are following the JSON format.
+                            "content": """You have been provided with responses from various models to the latest query. Synthesize these responses into a single, high-quality answer and use three concise sentences at the very most. If the models disagree on any point, note this and explain the different perspective very concisely in one go. Your response should be well-structured, comprehensive, and accurate and very concise. Your response should be in JSON format like the models, and start with a SINGLE VALUE USD prediction of the NFT Price. Then there will be an explanation component where you will conduct your thorough discussion. Ensure that you are following the JSON format.
                             """
                         }
                     ]
@@ -313,7 +364,7 @@ async def main():
             },
         {
             "role": "user",
-            "content": f"Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Here is the sample data: {sample_data}. "
+            "content": f"Your entire response/output is going to consist of a single JSON object, and you will NOT wrap it within JSON md markers. Here is the sample data: {metadata_data}. "
         }
     ]
     
@@ -328,13 +379,16 @@ async def main():
     print_colored(f"Aggregator: {aggregator_model.model_id} (max_tokens: {aggregator_model.max_tokens})", "yellow")
     
     try:
-        # Step 1: Get individual model responses
-        print_colored("\nGetting individual model responses...", "magenta")
-        individual_responses = await send_round(
+        # Step 1: Run the consensus process with data tracking
+        print_colored("\nRunning consensus process...", "magenta")
+        consensus_result, all_responses_data = await run_consensus_with_data(
             provider=provider,
             consensus_config=settings.consensus_config,
             initial_conversation=nft_appraisal_conversation
         )
+        
+        # Get the individual responses from the tracked data
+        individual_responses = all_responses_data.get("iteration_0", {})
         
         # Display individual responses
         format_and_print_responses(individual_responses, "<INDIVIDUAL MODEL RESPONSES>")
@@ -367,14 +421,6 @@ async def main():
             initial_confidence_score = 0
             print_colored("Warning: Could not extract any price estimates from model responses", "red")
         
-        # Step 2: Run the single consensus process
-        print_colored("\nRunning consensus aggregation...", "magenta")
-        consensus_result = await run_consensus(
-            provider=provider,
-            consensus_config=settings.consensus_config,
-            initial_conversation=nft_appraisal_conversation
-        )
-        
         # Display the final consensus result
         print_colored("\n" + "=" * 80, "green")
         print_colored("FINAL CONSENSUS RESULT".center(80), "green")
@@ -390,17 +436,18 @@ async def main():
         # Extract final price from consensus result
         final_consensus_price = extract_price_from_text(consensus_result)
         
-        # Get final model responses after seeing the consensus
-        print_colored("\nGetting final model responses after consensus...", "magenta")
-        final_responses = await get_final_responses(
-            provider, 
-            settings.consensus_config,
-            nft_appraisal_conversation,
-            consensus_result
-        )
+        # Get final model responses from the last iteration of consensus
+        final_iteration = settings.consensus_config.iterations
+        if final_iteration > 0 and f"iteration_{final_iteration}" in all_responses_data:
+            final_responses = all_responses_data[f"iteration_{final_iteration}"]
+            print_colored(f"\nUsing responses from iteration {final_iteration} for statistics", "magenta")
+        else:
+            final_responses = individual_responses
+            print_colored("\nUsing responses from initial round for statistics", "magenta")
         
-        # Display final model responses
-        format_and_print_responses(final_responses, "<FINAL MODEL RESPONSES>")
+        # Display final model responses if different from initial
+        if final_iteration > 0:
+            format_and_print_responses(final_responses, "<FINAL MODEL RESPONSES>")
         
         # Extract price estimates from final responses
         final_prices = {}
@@ -453,12 +500,20 @@ async def main():
             explanation = cleaned_result
             print_colored("Warning: Could not parse consensus result as JSON", "yellow")
         
+        # Before creating final output JSON, get ETH price
+        try:
+            eth_price = await fetch_ethereum_price()
+        except Exception as e:
+            print_colored(f"Warning: Could not fetch ETH price: {e}", "yellow")
+            eth_price = 0
+            
         # Create final output JSON
         final_output = {
             "price": final_consensus_price,
             "text": explanation,
             "standard_deviation": final_std_dev,
-            "total_confidence": final_confidence_score
+            "total_confidence": final_confidence_score,
+            "ethereum_price_usd":  final_consensus_price / eth_price if eth_price > 0 else 0,
         }
         
         # Convert to JSON string
@@ -468,20 +523,15 @@ async def main():
         print_colored("\nFINAL JSON OUTPUT:", "magenta")
         print(final_json_string)
         
+        # Save the results to a file
+        results_dir = Path("results")
+        results_dir.mkdir(exist_ok=True)
         
-        # Change this if you want file in results folder
-        want_file = True
+        results_file = results_dir / "latest_consensus_result.json"
+        with open(results_file, "w") as f:
+            f.write(final_json_string)
         
-        if want_file:
-            # Save the results to a file
-            results_dir = Path("results")
-            results_dir.mkdir(exist_ok=True)
-            
-            results_file = results_dir / "latest_consensus_result.json"
-            with open(results_file, "w") as f:
-                f.write(final_json_string)
-            
-            print_colored(f"\nSaved consensus result to {results_file}", "green")
+        print_colored(f"\nSaved consensus result to {results_file}", "green")
         
         # Return the final JSON string
         return final_json_string
@@ -502,5 +552,13 @@ async def main():
 
 
 if __name__ == "__main__":
-    result = asyncio.run(main())
+    # Local development testing
+    import sys
+    if len(sys.argv) != 3:
+        print("Usage: python cloud_index.py <contract_address> <token_id>")
+        sys.exit(1)
+    
+    contract_address = sys.argv[1]
+    token_id = sys.argv[2]
+    result = asyncio.run(process_nft_appraisal(contract_address, token_id))
     print_colored("\nProgram completed.", "green")
