@@ -19,7 +19,6 @@ from flare_ai_consensus.utils import load_json, parse_chat_response
 from datetime import datetime
 
 from dotenv import load_dotenv
-from sample import sample_data
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -27,7 +26,6 @@ CORS(app)  # Enable CORS for all routes
 
 load_dotenv()
 
-ACCURACY_METRIC_DESIRED = True
 
 # Parse data to compare accuracy
 def accuracy_preparation(json_data):
@@ -36,9 +34,6 @@ def accuracy_preparation(json_data):
         formatted_date = datetime.strptime(most_recent_transaction["date"], "%Y-%m-%d %H:%M:%S").strftime("%B, %Y")
     
     return most_recent_transaction["price_usd"], formatted_date, json_data
-
-if ACCURACY_METRIC_DESIRED:
-    ACTUAL_VALUE, DATE_TO_PREDICT, sample_data = accuracy_preparation(sample_data)
 
 
 def print_colored(text, color=None):
@@ -286,6 +281,8 @@ async def process_nft_appraisal(contract_address: str, token_id: str):
     
     # Fetch NFT data
     metadata_data = await fetch_nft_data(contract_address, token_id)
+    ACTUAL_VALUE, DATE_TO_PREDICT, metadata_data = accuracy_preparation(metadata_data)
+    
     
     print_colored("Preparing models...", "blue")
     
