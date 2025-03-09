@@ -26,6 +26,8 @@ from flare_ai_consensus.consensus.confidence.confidence_embeddings import (
 from sample import sample_data
 from dotenv import load_dotenv
 from Backend.AI.Sideinfo_api.sideinfo import main as get_nft_data
+from Backend.Ai.Sideinfo_api.sideinfo import main as get_nft_data
+
 
 # Load environment variables
 load_dotenv()
