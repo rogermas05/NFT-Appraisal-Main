@@ -223,7 +223,7 @@ async def run_consensus_with_data(
 
     # Step 1: Initial round
     print_colored("Running initial round of consensus...", "blue")
-    send_event("stage", {"name": "initial_round", "description": "Sending queries to all models for initial predictions"})
+    send_event("stage", {"name": "initial_round", "description": "Querying models for initial predictions"})
     
     responses = await send_round(
         provider, consensus_config, response_data["initial_conversation"]
