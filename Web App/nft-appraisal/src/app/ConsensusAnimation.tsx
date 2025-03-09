@@ -110,9 +110,14 @@ export function NetworkAnimation({
       eventSourceRef.current.close();
     }
 
-    // Create new EventSource connection with absolute URL
-    // Make sure this matches your actual API endpoint
-    const url = `/api/appraise/stream?contract_address=${encodeURIComponent(contractAddress)}&token_id=${encodeURIComponent(tokenId)}`;
+    addLog(
+      `Connecting to appraisal stream for ${contractAddress}:${tokenId}...`,
+      "info",
+    );
+
+    // Create new EventSource connection with the correct URL format
+    // Using the same base URL as in header.tsx
+    const url = `http://127.0.0.1:8080/appraise/stream?contract_address=${encodeURIComponent(contractAddress)}&token_id=${encodeURIComponent(tokenId)}`;
     console.log(`Stream URL: ${url}`);
 
     const eventSource = new EventSource(url);
