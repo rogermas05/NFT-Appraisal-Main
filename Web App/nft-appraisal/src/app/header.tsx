@@ -50,11 +50,11 @@ export default function Header() {
 
       // Start both API requests in parallel
       const nftDataPromise = fetch(
-        `https://get-nft-data-dkwdhhyv7q-uc.a.run.app/?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
+        `http://35.193.174.113:8081/get_nft_data?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
       );
       
       const appraisalPromise = fetch(
-        `https://us-central1-nft-appraisal.cloudfunctions.net/appraise_nft?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
+        `http://35.193.174.113:8080/appraise?contract_address=${finalContractAddress}&token_id=${finalTokenId}`
       );
 
       // Handle NFT data first

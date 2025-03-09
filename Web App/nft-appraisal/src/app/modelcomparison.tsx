@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { Info } from "lucide-react"
+import { useEffect, useState } from "react"
 import {
   Select,
   SelectContent,
@@ -39,6 +40,22 @@ export default function ModelComparison() {
     Math.round(appraisalData.total_confidence * 100) : 
     0;
 
+  // Get standard deviation for model predictions
+  const standardDeviation = appraisalData?.standard_deviation ?? 0;
+
+  // Add this near the top of your component
+  useEffect(() => {
+    if (appraisalData) {
+      console.log("Appraisal data received:", appraisalData);
+      console.log("Accuracy value:", appraisalData.accuracy);
+    }
+  }, [appraisalData]);
+
+  // Calculate accuracy percentage
+  const accuracyPercentage = appraisalData && appraisalData.accuracy !== undefined ? 
+    Math.round(appraisalData.accuracy * 100) : 
+    0;
+
   // Loading skeleton component
   const LoadingSkeleton = () => (
     <>
@@ -57,13 +74,24 @@ export default function ModelComparison() {
         </div>
       </div>
 
-      {/* Explanation Text Skeleton */}
+      {/* Accuracy Score Skeleton */}
+      <div className="bg-gray-800/50 rounded-lg p-6">
+        <p className="text-sm text-gray-400 mb-2">Accuracy Score</p>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-3 bg-gray-700 rounded-full animate-pulse"></div>
+          <div className="h-5 w-10 bg-gray-700 rounded-md animate-pulse"></div>
+        </div>
+      </div>
+
+      {/* Explanation Text Skeleton - Make this more flexible */}
       <div className="bg-gray-800/50 rounded-lg p-6">
         <p className="text-sm text-gray-400 mb-2">Model Explanation</p>
         <div className="space-y-2">
           <div className="h-4 bg-gray-700 rounded-md animate-pulse w-full"></div>
           <div className="h-4 bg-gray-700 rounded-md animate-pulse w-5/6"></div>
           <div className="h-4 bg-gray-700 rounded-md animate-pulse w-4/6"></div>
+          <div className="h-4 bg-gray-700 rounded-md animate-pulse w-3/4"></div>
+          <div className="h-4 bg-gray-700 rounded-md animate-pulse w-2/3"></div>
         </div>
       </div>
     </>
@@ -101,6 +129,37 @@ export default function ModelComparison() {
     setModel2(value);
   };
 
+  // Add tooltip component for reuse
+  const InfoTooltip = ({ text, children }: { text: string, children?: React.ReactNode }) => (
+    <div className="group relative inline-block ml-1">
+      <Info size={16} className="text-gray-400 hover:text-gray-300 cursor-help" />
+      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-2 bg-gray-700 text-xs text-gray-200 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
+        {text}
+        {children}
+        <div className="absolute left-1/2 -translate-x-1/2 top-full -mt-1 border-4 border-transparent border-t-gray-700"></div>
+      </div>
+    </div>
+  );
+
+  // Create confidence tooltip content with standard deviation
+  const confidenceTooltipContent = (modelId: ModelId) => {
+    const baseText = "Confidence score represents how certain the model is about its prediction. Higher values indicate greater confidence in the estimated value.";
+    
+    if (modelId === "regression" && appraisalData && appraisalData.standard_deviation) {
+      return (
+        <>
+          {baseText}
+          <div className="mt-2 pt-2 border-t border-gray-600">
+            <span className="font-semibold">Standard Deviation:</span> {appraisalData.standard_deviation.toFixed(2)}
+            <p className="mt-1">This value shows how much the predictions from different models vary. Lower standard deviation indicates better agreement between models.</p>
+          </div>
+        </>
+      );
+    }
+    
+    return baseText;
+  };
+
   return (
     <div className="flex-1 flex flex-col gap-6 p-6">
       {/* Error message toast */}
@@ -112,24 +171,10 @@ export default function ModelComparison() {
       
       <div className="flex flex-1 gap-6">
         {/* Model 1 Output */}
-        <div 
-          className="flex-1 relative"
-          style={{ perspective: '1000px' }}
-        >
-          <div 
-            className={`h-full transition-transform duration-600`}
-            style={{ 
-              transformStyle: 'preserve-3d',
-              transition: 'transform 0.6s',
-              transform: showAnimation1 ? 'rotateY(180deg)' : 'rotateY(0deg)'
-            }}
-          >
-            {/* Front side */}
-            <div 
-              className="absolute inset-0 w-full h-full bg-gray-800/30 rounded-xl p-6"
-              style={{ backfaceVisibility: 'hidden' }}
-            >
-              <div className="space-y-6">
+        <div className="flex-1 relative">
+          {!showAnimation1 ? (
+            <div className="h-full bg-gray-800/30 rounded-xl p-6 flex flex-col">
+              <div className="space-y-6 flex-1">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-bold">Model Prediction</h2>
@@ -150,7 +195,6 @@ export default function ModelComparison() {
                       </SelectContent>
                     </Select>
                   </div>
-                  {/* Replace toggle with button - Front side Model 1 */}
                   <div className="flex items-center gap-2">
                     <button
                       className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-full text-sm hover:bg-blue-500/30 transition-colors"
@@ -161,126 +205,93 @@ export default function ModelComparison() {
                   </div>
                 </div>
 
-                {!showAnimation1 ? (
+                {model1 === "regression" && isAppraisalLoading ? (
+                  <LoadingSkeleton />
+                ) : (
                   <>
-                    {model1 === "regression" && isAppraisalLoading ? (
-                      <LoadingSkeleton />
-                    ) : (
-                      <>
-                        {/* Price Prediction - Updated format */}
-                        <div className="bg-gray-800/50 rounded-lg p-6">
-                          <p className="text-sm text-gray-400 mb-2">Estimated Value</p>
-                          <p className="text-3xl font-bold text-blue-400">
-                            {model1 === "regression" && appraisalData ? 
-                              `${appraisalData.ethereum_price_usd.toFixed(2)} ETH ($${appraisalData.price.toFixed(2)})` : 
-                              "-.-- ETH"}
-                          </p>
-                        </div>
+                    {/* Price Prediction */}
+                    <div className="bg-gray-800/50 rounded-lg p-6">
+                      <p className="text-sm text-gray-400 mb-2">Estimated Value</p>
+                      <p className="text-3xl font-bold text-blue-400">
+                        {model1 === "regression" && appraisalData ? 
+                          `${appraisalData.ethereum_price_usd.toFixed(2)} ETH ($${appraisalData.price.toFixed(2)})` : 
+                          "-.-- ETH"}
+                      </p>
+                    </div>
 
-                        {/* Confidence Score */}
-                        <div className="bg-gray-800/50 rounded-lg p-6">
-                          <p className="text-sm text-gray-400 mb-2">Confidence Score</p>
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 h-3 bg-gray-700 rounded-full">
-                              <div 
-                                className="h-full bg-blue-500 rounded-full"
-                                style={{ 
-                                  width: model1 === "regression" && appraisalData ? 
-                                    `${confidencePercentage}%` : 
-                                    "0%" 
-                                }}
-                              ></div>
-                            </div>
-                            <span className="text-sm font-medium">
-                              {model1 === "regression" && appraisalData ? 
+                    {/* Confidence Score */}
+                    <div className="bg-gray-800/50 rounded-lg p-6">
+                      <p className="text-sm text-gray-400 mb-2 flex items-center">
+                        Confidence Score
+                        <InfoTooltip text={confidenceTooltipContent(model1)} />
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-3 bg-gray-700 rounded-full">
+                          <div 
+                            className="h-full bg-blue-500 rounded-full"
+                            style={{ 
+                              width: model1 === "regression" && appraisalData ? 
                                 `${confidencePercentage}%` : 
-                                "0%"}
-                            </span>
-                          </div>
+                                "0%" 
+                            }}
+                          ></div>
                         </div>
+                        <span className="text-sm font-medium">
+                          {model1 === "regression" && appraisalData ? 
+                            `${confidencePercentage}%` : 
+                            "0%"}
+                        </span>
+                      </div>
+                    </div>
 
-                        {/* Explanation Text - Only show if we have appraisal data */}
-                        {model1 === "regression" && appraisalData && (
-                          <div className="bg-gray-800/50 rounded-lg p-6">
-                            <p className="text-sm text-gray-400 mb-2">Model Explanation</p>
-                            <p className="text-sm text-gray-200">{appraisalData.text}</p>
-                          </div>
-                        )}
-                      </>
+                    {/* Accuracy Score */}
+                    <div className="bg-gray-800/50 rounded-lg p-6">
+                      <p className="text-sm text-gray-400 mb-2 flex items-center">
+                        Accuracy Score
+                        <InfoTooltip text="Accuracy score measures how close the model's predictions have been to actual sale prices historically. Higher values indicate better predictive performance." />
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-3 bg-gray-700 rounded-full">
+                          <div 
+                            className="h-full bg-green-500 rounded-full"
+                            style={{ 
+                              width: model1 === "regression" && appraisalData ? 
+                                `${accuracyPercentage}%` : 
+                                "0%" 
+                            }}
+                          ></div>
+                        </div>
+                        <span className="text-sm font-medium">
+                          {model1 === "regression" && appraisalData ? 
+                            `${accuracyPercentage}%` : 
+                            "0%"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Explanation Text - Only show if we have appraisal data */}
+                    {model1 === "regression" && appraisalData && (
+                      <div className="bg-gray-800/50 rounded-lg p-6">
+                        <p className="text-sm text-gray-400 mb-2">Model Explanation</p>
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap">{appraisalData.text}</p>
+                      </div>
                     )}
                   </>
-                ) : (
-                  animationContent
                 )}
               </div>
             </div>
-
-            {/* Back side of Model 1 */}
-            <div 
-              className="absolute inset-0 w-full h-full bg-gray-800/30 rounded-xl p-6"
-              style={{ 
-                backfaceVisibility: 'hidden',
-                transform: 'rotateY(180deg)'
-              }}
-            >
-              <div className="flex flex-col h-full">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Model Prediction</h2>
-                    <Select value={model1} onValueChange={handleModel1Change}>
-                      <SelectTrigger className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm w-60">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-200 text-gray-900">
-                        {AVAILABLE_MODELS.map((model) => (
-                          <SelectItem 
-                            key={model.id} 
-                            value={model.id}
-                            className="hover:bg-gray-300 focus:bg-gray-300"
-                          >
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {/* Replace toggle with button - Back side Model 1 */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-full text-sm hover:bg-blue-500/30 transition-colors"
-                      onClick={() => setShowAnimation1(!showAnimation1)}
-                    >
-                      Show Prediction
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 flex items-center justify-center mt-6">
-                  {animationContent}
-                </div>
-              </div>
+          ) : (
+            <div className="h-full bg-gray-800/30 rounded-xl p-6 flex items-center justify-center">
+              {animationContent}
             </div>
-          </div>
+          )}
         </div>
 
         {/* Model 2 Output */}
-        <div 
-          className="flex-1 relative"
-          style={{ perspective: '1000px' }}
-        >
-          <div 
-            className={`h-full transition-transform duration-600`}
-            style={{ 
-              transformStyle: 'preserve-3d',
-              transition: 'transform 0.6s',
-              transform: showAnimation2 ? 'rotateY(180deg)' : 'rotateY(0deg)'
-            }}
-          >
-            {/* Front side */}
-            <div 
-              className="absolute inset-0 w-full h-full bg-gray-800/30 rounded-xl p-6"
-              style={{ backfaceVisibility: 'hidden' }}
-            >
-              <div className="space-y-6">
+        <div className="flex-1 relative">
+          {!showAnimation2 ? (
+            <div className="h-full bg-gray-800/30 rounded-xl p-6 flex flex-col">
+              <div className="space-y-6 flex-1">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-bold">Model Prediction</h2>
@@ -301,7 +312,6 @@ export default function ModelComparison() {
                       </SelectContent>
                     </Select>
                   </div>
-                  {/* Replace toggle with button - Front side Model 2 */}
                   <div className="flex items-center gap-2">
                     <button
                       className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-full text-sm hover:bg-purple-500/30 transition-colors"
@@ -312,105 +322,86 @@ export default function ModelComparison() {
                   </div>
                 </div>
 
-                {!showAnimation2 ? (
+                {model2 === "regression" && isAppraisalLoading ? (
+                  <LoadingSkeleton />
+                ) : (
                   <>
-                    {model2 === "regression" && isAppraisalLoading ? (
-                      <LoadingSkeleton />
-                    ) : (
-                      <>
-                        {/* Price Prediction - Updated format */}
-                        <div className="bg-gray-800/50 rounded-lg p-6">
-                          <p className="text-sm text-gray-400 mb-2">Estimated Value</p>
-                          <p className="text-3xl font-bold text-purple-400">
-                            {model2 === "regression" && appraisalData ? 
-                              `${appraisalData.ethereum_price_usd.toFixed(2)} ETH ($${appraisalData.price.toFixed(2)})` : 
-                              "-.-- ETH"}
-                          </p>
-                        </div>
+                    {/* Price Prediction */}
+                    <div className="bg-gray-800/50 rounded-lg p-6">
+                      <p className="text-sm text-gray-400 mb-2">Estimated Value</p>
+                      <p className="text-3xl font-bold text-purple-400">
+                        {model2 === "regression" && appraisalData ? 
+                          `${appraisalData.ethereum_price_usd.toFixed(2)} ETH ($${appraisalData.price.toFixed(2)})` : 
+                          "-.-- ETH"}
+                      </p>
+                    </div>
 
-                        {/* Confidence Score */}
-                        <div className="bg-gray-800/50 rounded-lg p-6">
-                          <p className="text-sm text-gray-400 mb-2">Confidence Score</p>
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 h-3 bg-gray-700 rounded-full">
-                              <div 
-                                className="h-full bg-purple-500 rounded-full"
-                                style={{ 
-                                  width: model2 === "regression" && appraisalData ? 
-                                    `${confidencePercentage}%` : 
-                                    "0%" 
-                                }}
-                              ></div>
-                            </div>
-                            <span className="text-sm font-medium">
-                              {model2 === "regression" && appraisalData ? 
+                    {/* Confidence Score */}
+                    <div className="bg-gray-800/50 rounded-lg p-6">
+                      <p className="text-sm text-gray-400 mb-2 flex items-center">
+                        Confidence Score
+                        <InfoTooltip text={confidenceTooltipContent(model2)} />
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-3 bg-gray-700 rounded-full">
+                          <div 
+                            className="h-full bg-purple-500 rounded-full"
+                            style={{ 
+                              width: model2 === "regression" && appraisalData ? 
                                 `${confidencePercentage}%` : 
-                                "0%"}
-                            </span>
-                          </div>
+                                "0%" 
+                            }}
+                          ></div>
                         </div>
+                        <span className="text-sm font-medium">
+                          {model2 === "regression" && appraisalData ? 
+                            `${confidencePercentage}%` : 
+                            "0%"}
+                        </span>
+                      </div>
+                    </div>
 
-                        {/* Explanation Text - Only show if we have appraisal data */}
-                        {model2 === "regression" && appraisalData && (
-                          <div className="bg-gray-800/50 rounded-lg p-6">
-                            <p className="text-sm text-gray-400 mb-2">Model Explanation</p>
-                            <p className="text-sm text-gray-200">{appraisalData.text}</p>
-                          </div>
-                        )}
-                      </>
+                    {/* Accuracy Score */}
+                    <div className="bg-gray-800/50 rounded-lg p-6">
+                      <p className="text-sm text-gray-400 mb-2 flex items-center">
+                        Accuracy Score
+                        <InfoTooltip text="Accuracy score measures how close the model's predictions have been to actual sale prices historically. Higher values indicate better predictive performance." />
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-3 bg-gray-700 rounded-full">
+                          <div 
+                            className="h-full bg-green-500 rounded-full"
+                            style={{ 
+                              width: model2 === "regression" && appraisalData ? 
+                                `${accuracyPercentage}%` : 
+                                "0%" 
+                            }}
+                          ></div>
+                        </div>
+                        <span className="text-sm font-medium">
+                          {model2 === "regression" && appraisalData ? 
+                            `${accuracyPercentage}%` : 
+                            "0%"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Explanation Text - Only show if we have appraisal data */}
+                    {model2 === "regression" && appraisalData && (
+                      <div className="bg-gray-800/50 rounded-lg p-6">
+                        <p className="text-sm text-gray-400 mb-2">Model Explanation</p>
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap">{appraisalData.text}</p>
+                      </div>
                     )}
                   </>
-                ) : (
-                  animationContent
                 )}
               </div>
             </div>
-
-            {/* Back side of Model 2 */}
-            <div 
-              className="absolute inset-0 w-full h-full bg-gray-800/30 rounded-xl p-6"
-              style={{ 
-                backfaceVisibility: 'hidden',
-                transform: 'rotateY(180deg)'
-              }}
-            >
-              <div className="flex flex-col h-full">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Model Prediction</h2>
-                    <Select value={model2} onValueChange={handleModel2Change}>
-                      <SelectTrigger className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm w-60">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-200 text-gray-900">
-                        {AVAILABLE_MODELS.map((model) => (
-                          <SelectItem 
-                            key={model.id} 
-                            value={model.id}
-                            className="hover:bg-gray-300 focus:bg-gray-300"
-                          >
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {/* Replace toggle with button - Back side Model 2 */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-full text-sm hover:bg-purple-500/30 transition-colors"
-                      onClick={() => setShowAnimation2(!showAnimation2)}
-                    >
-                      Show Prediction
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 flex items-center justify-center mt-6">
-                  {animationContent}
-                </div>
-              </div>
+          ) : (
+            <div className="h-full bg-gray-800/30 rounded-xl p-6 flex items-center justify-center">
+              {animationContent}
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
