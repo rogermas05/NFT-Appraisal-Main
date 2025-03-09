@@ -9,7 +9,7 @@ def generate_metadata(address, token_id):
     metadata_params = {
         "chain": "eth",
         "format": "decimal",
-        "media_items": False,
+        "media_items": True,
         "normalize_metadata": True,
         "address": address,
         "token_id": token_id

@@ -8,7 +8,7 @@ import SideInfo from "./sideinfo"
 export default function HomePage() {
   return (
     <NFTDataProvider>
-      <main className="flex min-h-screen flex-col bg-bgcol text-white">
+      <main className="flex h-full min-h-screen flex-col bg-bgcol text-white">
         <Header />
         <div className="flex flex-1">
           <ModelComparison />
