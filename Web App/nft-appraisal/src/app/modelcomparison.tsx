@@ -62,30 +62,30 @@ export default function ModelComparison() {
   const tokenId = nftData?.tokenId;
 
   // Updated helper functions to handle different API response formats
-  const getEthereumPrice = (modelData: any): string => {
+  const getEthereumPrice = (modelData: any, decimals: number = 2): string => {
     if (!modelData) return "-.--";
 
     // Direct ethereum price if available
     if (modelData.ethereum_price_usd !== undefined) {
-      return modelData.ethereum_price_usd.toFixed(2);
+      return modelData.ethereum_price_usd.toFixed(decimals);
     }
 
     // If the API only returns USD price (like confidence API), estimate ETH price
     // Assuming current ETH price of ~$2,500 for conversion
     if (modelData.price !== undefined) {
       const estimatedEthPrice = modelData.price / 2500;
-      return estimatedEthPrice.toFixed(4);
+      return estimatedEthPrice.toFixed(decimals);
     }
 
     return "-.--";
   };
 
-  const getUsdPrice = (modelData: any): string => {
+  const getUsdPrice = (modelData: any, decimals: number = 2): string => {
     if (!modelData) return "-.--";
 
     // Direct USD price
     if (modelData.price !== undefined) {
-      return modelData.price.toFixed(2);
+      return modelData.price.toFixed(decimals);
     }
 
     return "-.--";
@@ -442,7 +442,7 @@ export default function ModelComparison() {
                       </p>
                       <p className="text-3xl font-bold text-purple-400">
                         {model2Data
-                          ? `${getEthereumPrice(model2Data)} ETH ($${getUsdPrice(model2Data)})`
+                          ? `${getEthereumPrice(model2Data, 2)} ETH ($${getUsdPrice(model2Data, 2)})`
                           : "-.-- ETH"}
                       </p>
                     </div>
