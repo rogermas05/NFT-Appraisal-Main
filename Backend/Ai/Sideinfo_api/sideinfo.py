@@ -5,12 +5,15 @@ import requests
 from datetime import datetime
 import json
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Import CORS
 
 # Load environment variables
 load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
+# Enable CORS for all routes
+CORS(app)
 
 def generate_metadata(address, token_id):
     api_key = os.getenv('MORALIS_API')
