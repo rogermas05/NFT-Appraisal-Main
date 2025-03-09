@@ -3,11 +3,10 @@ import asyncio
 import os
 import json
 import re
+import math
 from pathlib import Path
 import textwrap
 import time
-import statistics
-import random
 import structlog
 
 from flare_ai_consensus.router import AsyncOpenRouterProvider
@@ -19,7 +18,6 @@ from flare_ai_consensus.consensus.confidence.confidence_embeddings import (
     calculate_text_similarity, 
     extract_price_and_explanation
 )
-from flare_ai_consensus.consensus.confidence.confidence_prompts import CHALLENGE_PROMPTS
 
 # Import sample data
 from sample import sample_data
@@ -37,6 +35,19 @@ structlog.configure(
 )
 
 logger = structlog.get_logger()
+
+# Improved challenge prompts that encourage refinement rather than radical changes
+CHALLENGE_PROMPTS = [
+    "Based on your analysis, could you refine your price estimate? Please consider both bullish and bearish market scenarios, focusing on the most recent sales data.",
+    
+    "Could you revisit your price estimate, taking into account the NFT's rarity rank and recent sales patterns? A slightly more detailed analysis would be helpful.",
+    
+    "Your price estimate seems reasonable, but could you provide a more nuanced analysis that considers potential market fluctuations? Please maintain a focus on recent transaction data.",
+    
+    "What factors might cause your price estimate to change in either direction? Please reconsider your valuation with these factors in mind.",
+    
+    "Recent market trends suggest some volatility in NFT valuations. Could you refine your estimate considering both optimistic and conservative scenarios?"
+]
 
 def print_colored(text, color=None):
     """Print text with ANSI color codes"""
@@ -129,6 +140,7 @@ def properly_extract_json_price(text):
     
     # Try to parse as JSON
     try:
+        # First try to parse the whole text
         data = json.loads(cleaned_text)
         if isinstance(data, dict):
             # Extract price
@@ -140,7 +152,17 @@ def properly_extract_json_price(text):
                 except (ValueError, TypeError):
                     pass
     except json.JSONDecodeError:
-        pass
+        # If that fails, try to find and parse just the JSON part
+        json_pattern = r'({[^{}]*"price"[^{}]*})'
+        match = re.search(json_pattern, cleaned_text)
+        if match:
+            try:
+                json_part = match.group(1)
+                data = json.loads(json_part)
+                if "price" in data:
+                    return float(data["price"]), data.get("explanation", "")
+            except (json.JSONDecodeError, ValueError):
+                pass
     
     # If JSON parsing fails, fall back to regex
     print_colored("JSON parsing failed, falling back to regex extraction", "yellow")
@@ -231,7 +253,7 @@ async def send_initial_round(provider, consensus_config, initial_conversation):
     return initial_responses
 
 
-async def send_challenge_round(provider, consensus_config, initial_conversation, challenge_prompt):
+async def send_challenge_round(provider, consensus_config, initial_conversation, challenge_prompt, initial_responses):
     """Send challenge prompts to all models and display responses as they come in"""
     logger.info("Sending challenge prompts to models")
     challenge_responses = {}
@@ -240,9 +262,30 @@ async def send_challenge_round(provider, consensus_config, initial_conversation,
         model_id = model.model_id
         print_colored(f"Sending challenge to {model_id}...", "blue")
         
+        # Get the model's original response and extract price
+        original_response = initial_responses.get(model_id, "")
+        original_price, _ = properly_extract_json_price(original_response)
+        
+        # If price couldn't be extracted, try the fallback method
+        if original_price is None:
+            tmp_price, _ = extract_price_and_explanation(original_response)
+            original_price = tmp_price
+        
+        price_str = f"${original_price:.2f}" if original_price is not None else "unknown"
+        
+        # Create contextual challenge prompt that includes original response
+        contextualized_prompt = f"""
+        Your previous price estimate was {price_str}.
+
+        {challenge_prompt}
+
+        
+        Remember to maintain the same JSON format with 'price' and 'explanation' fields.
+        """
+        
         # Build conversation with challenge
         conversation = initial_conversation.copy()
-        conversation.append({"role": "user", "content": challenge_prompt})
+        conversation.append({"role": "user", "content": contextualized_prompt})
         
         # Create payload
         payload = {
@@ -253,31 +296,31 @@ async def send_challenge_round(provider, consensus_config, initial_conversation,
         }
         
         # Send request and immediately show response (no concurrent processing)
-        try:
-            print_colored(f"Waiting for {model_id} to respond...", "blue")
-            response = await provider.send_chat_completion(payload)
-            text = response.get("choices", [])[0].get("message", {}).get("content", "")
-            challenge_responses[model_id] = text
+        # try:
+        #     print_colored(f"Waiting for {model_id} to respond...", "blue")
+        #     response = await provider.send_chat_completion(payload)
+        #     text = response.get("choices", [])[0].get("message", {}).get("content", "")
+        #     challenge_responses[model_id] = text
             
-            # Immediately display this model's response
-            print_colored(f"\n----- Response from {model_id} -----", "green")
+        #     # Immediately display this model's response
+        #     print_colored(f"\n----- Response from {model_id} -----", "green")
             
-            # Extract price and explanation
-            price, explanation = properly_extract_json_price(text)
-            if price is not None:
-                print_colored(f"Extracted price: ${price:.2f}", "cyan")
+        #     # Extract price and explanation
+        #     price, explanation = properly_extract_json_price(text)
+        #     if price is not None:
+        #         print_colored(f"Extracted price: ${price:.2f}", "cyan")
             
-            # Show truncated response
-            max_preview_chars = 500
-            preview = text if len(text) <= max_preview_chars else text[:max_preview_chars] + "..."
-            print(preview)
-            print_colored("-" * 40, "green")
+        #     # Show truncated response
+        #     max_preview_chars = 500
+        #     preview = text if len(text) <= max_preview_chars else text[:max_preview_chars] + "..."
+        #     print(preview)
+        #     print_colored("-" * 40, "green")
             
-        except Exception as e:
-            logger.error(f"Error getting challenge response from {model_id}: {e}")
-            error_msg = f"Error: {str(e)}"
-            challenge_responses[model_id] = error_msg
-            print_colored(f"Error getting response from {model_id}: {e}", "red")
+        # except Exception as e:
+        #     logger.error(f"Error getting challenge response from {model_id}: {e}")
+        #     error_msg = f"Error: {str(e)}"
+        #     challenge_responses[model_id] = error_msg
+        #     print_colored(f"Error getting response from {model_id}: {e}", "red")
     
     return challenge_responses
 
@@ -315,21 +358,26 @@ async def analyze_model_responses(initial_responses, challenge_responses):
         initial_explanation = initial_explanation or ""
         challenge_explanation = challenge_explanation or ""
         
-        # Calculate price change
+        # Calculate price change with improved formula
         if initial_price == 0 and challenge_price == 0:
             price_change = 0
         elif initial_price == 0:
-            price_change = 1  # Maximum change if initial price was 0
+            price_change = 0.8  # Cap at 80% for maximum change
         else:
-            # Calculate relative price change with a cap at 1.0
-            price_change = min(abs(challenge_price - initial_price) / max(initial_price, 1), 1)
+            # Calculate relative price change with softening function
+            relative_change = abs(challenge_price - initial_price) / max(initial_price, 1)
+            # Apply a square root transformation to reduce impact of large changes
+            # Cap at 80% to prevent extreme penalties
+            price_change = min(0.8, math.sqrt(min(1, relative_change)))
             
+        # Calculate price stability (inverse of price change)
+        price_stability = 1 - price_change
+        
         # Calculate text similarity
         text_similarity = calculate_text_similarity(initial_explanation, challenge_explanation)
         
         # Calculate confidence score using weighted formula
         # 30% weight on text similarity, 70% on price stability
-        price_stability = 1 - price_change
         confidence_score = (0.3 * text_similarity) + (0.7 * price_stability)
         
         # Ensure score is in [0,1] range
@@ -349,7 +397,8 @@ async def analyze_model_responses(initial_responses, challenge_responses):
         print_colored(f"\nModel: {model_id}", "yellow")
         print_colored(f"Initial price: ${initial_price:.2f}", "cyan")
         print_colored(f"Challenge price: ${challenge_price:.2f}", "cyan")
-        print_colored(f"Price change: {price_change*100:.2f}%", "magenta")
+        print_colored(f"Raw change: {abs(challenge_price - initial_price) / max(initial_price, 1):.2%}", "cyan")
+        print_colored(f"Softened price change: {price_change:.2%}", "magenta")
         print_colored(f"Price stability: {price_stability:.4f}", "magenta")
         print_colored(f"Text similarity: {text_similarity:.4f}", "magenta")
         print_colored(f"Formula: 0.3 * {text_similarity:.4f} + 0.7 * {price_stability:.4f} = {confidence_score:.4f}", "blue")
@@ -388,6 +437,26 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
     # Calculate price statistics
     prices = [analysis[model_id]["challenge_price"] for model_id in analysis]
     
+    # Handle outliers by removing extreme values
+    if len(prices) >= 3:
+        # Sort prices
+        sorted_prices = sorted(prices)
+        # Calculate Q1 and Q3
+        q1_index = len(sorted_prices) // 4
+        q3_index = 3 * len(sorted_prices) // 4
+        q1 = sorted_prices[q1_index]
+        q3 = sorted_prices[q3_index]
+        # Calculate IQR and bounds
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        # Filter out outliers
+        filtered_prices = [p for p in prices if lower_bound <= p <= upper_bound]
+        
+        if filtered_prices:
+            print_colored(f"Removed {len(prices) - len(filtered_prices)} outliers", "yellow")
+            prices = filtered_prices
+    
     # Only calculate if we have valid prices
     if prices:
         # Filter out None or zero values
@@ -395,15 +464,18 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
         
         if valid_prices:
             mean_price = statistics.mean(valid_prices)
+            median_price = statistics.median(valid_prices)
             std_dev = statistics.stdev(valid_prices) if len(valid_prices) > 1 else 0
         else:
             mean_price = 0
+            median_price = 0
             std_dev = 0
     else:
         mean_price = 0
+        median_price = 0
         std_dev = 0
     
-    # Calculate weighted price
+    # Calculate weighted price - use challenge prices
     weighted_price = 0
     for model_id, weight in weights.items():
         if model_id in analysis:
@@ -424,6 +496,7 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
     
     print_colored(f"\nWeighted price: ${weighted_price:.2f}", "green")
     print_colored(f"Mean price: ${mean_price:.2f}", "cyan")
+    print_colored(f"Median price: ${median_price:.2f}", "cyan")
     print_colored(f"Standard deviation: ${std_dev:.2f}", "cyan")
     
     # Create weighted aggregation text for the aggregator
@@ -448,6 +521,7 @@ async def weighted_aggregation(provider, aggregator_config, model_responses, ana
             f"Aggregated responses from multiple models with confidence-based weights:\n\n"
             f"Weighted price: ${weighted_price:.2f}\n"
             f"Mean price: ${mean_price:.2f}\n"
+            f"Median price: ${median_price:.2f}\n"
             f"Standard deviation: ${std_dev:.2f}\n\n"
             f"{weighted_text}"
         )
@@ -547,7 +621,7 @@ Use the weights to determine each model's contribution, giving more weight to mo
             
         result_json = {
             "price": weighted_price,
-            "explanation": "Final price estimate based on weighted model contributions. Higher weights were given to models with greater consistency between initial and challenged responses.",
+            "explanation": f"Final price estimate of ${weighted_price:.2f} based on weighted model contributions. Higher weights were given to models with greater consistency between initial and challenged responses.",
             "standard_deviation": std_dev,
             "models": models_json
         }
@@ -558,8 +632,6 @@ Use the weights to determine each model's contribution, giving more weight to mo
 
 
 async def main():
-    # Handle command line arguments
-    import sys
     import random
     
     # Load API key from environment variable
@@ -676,13 +748,14 @@ async def main():
         challenge_prompt = random.choice(CHALLENGE_PROMPTS)
         print_colored(f"\nSelected challenge prompt: '{challenge_prompt}'", "blue")
         
-        # Step 3: Send challenge to all models
+        # Step 3: Send challenge to all models, including their original responses
         print_colored("\nSending challenge prompt to all models...", "magenta")
         challenge_responses = await send_challenge_round(
             provider=provider,
             consensus_config=settings.consensus_config,
             initial_conversation=nft_appraisal_conversation,
-            challenge_prompt=challenge_prompt
+            challenge_prompt=challenge_prompt,
+            initial_responses=initial_responses
         )
         
         # Display challenge responses
@@ -731,4 +804,6 @@ async def main():
 
 
 if __name__ == "__main__":
+    # Import needed modules for statistics
+    import statistics
     asyncio.run(main())
